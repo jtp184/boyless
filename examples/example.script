@@ -1,0 +1,10 @@
+# boyless example script
+# The boot ROM animation runs for ~300 frames before the cartridge's own code
+# starts, so wait past it before the first capture (see README "Boot timing").
+wait 300
+screenshot intro.bmp
+press start 4
+wait 30
+press a 4
+wait 30
+screenshot after_menu.bmp

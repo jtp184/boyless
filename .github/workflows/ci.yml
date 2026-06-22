@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
+      - name: Install RGBDS
+        # rgbds is not packaged in the Ubuntu apt repositories, so install the
+        # official statically-linked release binaries (gbdev/rgbds).
+        run: |
+          mkdir -p /tmp/rgbds
+          curl -sSfL https://github.com/gbdev/rgbds/releases/download/v1.0.1/rgbds-linux-x86_64.tar.xz \
+            | tar xJ -C /tmp/rgbds
+          sudo install -m755 /tmp/rgbds/rgbasm /tmp/rgbds/rgblink /tmp/rgbds/rgbfix /tmp/rgbds/rgbgfx /usr/local/bin/
+          rgbasm --version
+
+      - name: Build
+        run: make
+
+      - name: Unit tests
+        run: make test
+
+      - name: Integration tests
+        run: make integration

@@ -1,0 +1,100 @@
+#include "screenshot.h"
+#include <stdio.h>
+#include <string.h>
+
+/* Write a 32-bit unsigned value as 4 little-endian bytes (no alignment req.). */
+static void put_u32le(uint8_t *p, uint32_t v)
+{
+    p[0] = (uint8_t)(v);
+    p[1] = (uint8_t)(v >> 8);
+    p[2] = (uint8_t)(v >> 16);
+    p[3] = (uint8_t)(v >> 24);
+}
+
+/* Write a 32-bit signed value as 4 little-endian bytes (two's-complement). */
+static void put_i32le(uint8_t *p, int32_t v)
+{
+    put_u32le(p, (uint32_t)v);
+}
+
+static bool use_tga = false;
+
+/* Immutable header templates; each write copies one into a local buffer and
+   patches the per-image fields there, so screenshot_write stays reentrant. */
+static const uint8_t bmp_header_template[] = {
+    0x42, 0x4D, 0x48, 0x68, 0x01, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x46, 0x00, 0x00, 0x00, 0x38, 0x00,
+    0x00, 0x00, 0xA0, 0x00, 0x00, 0x00, 0x70, 0xFF,
+    0xFF, 0xFF, 0x01, 0x00, 0x20, 0x00, 0x03, 0x00,
+    0x00, 0x00, 0x02, 0x68, 0x01, 0x00, 0x12, 0x0B,
+    0x00, 0x00, 0x12, 0x0B, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0xFF, 0x00, 0x00, 0xFF, 0x00, 0x00, 0xFF,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+
+static const uint8_t tga_header_template[] = {
+    0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0xA0, 0x00, 0x90, 0x00,
+    0x20, 0x28,
+};
+
+void screenshot_set_format(bool tga)
+{
+    use_tga = tga;
+}
+
+const char *screenshot_extension(void)
+{
+    return use_tga ? "tga" : "bmp";
+}
+
+uint32_t screenshot_rgb_encode(GB_gameboy_t *gb, uint8_t r, uint8_t g, uint8_t b)
+{
+    (void)gb;
+#ifdef GB_BIG_ENDIAN
+    if (use_tga) {
+        return (r << 8) | (g << 16) | (b << 24);
+    }
+    return (r << 0) | (g << 8) | (b << 16);
+#else
+    if (use_tga) {
+        return (r << 16) | (g << 8) | (b);
+    }
+    return (r << 24) | (g << 16) | (b << 8);
+#endif
+}
+
+int screenshot_write(const char *path, const uint32_t *pixels,
+                     unsigned w, unsigned h)
+{
+    FILE *f = fopen(path, "wb");
+    if (!f) {
+        fprintf(stderr, "Failed to write screenshot '%s'\n", path);
+        return -1;
+    }
+
+    if (use_tga) {
+        uint8_t header[sizeof(tga_header_template)];
+        memcpy(header, tga_header_template, sizeof(header));
+        header[0xC] = w;
+        header[0xD] = w >> 8;
+        header[0xE] = h;
+        header[0xF] = h >> 8;
+        fwrite(header, 1, sizeof(header), f);
+    }
+    else {
+        uint8_t header[sizeof(bmp_header_template)];
+        memcpy(header, bmp_header_template, sizeof(header));
+        put_u32le(&header[0x2],  (uint32_t)(sizeof(header) + sizeof(pixels[0]) * w * h + 2));
+        put_u32le(&header[0x12], w);
+        put_i32le(&header[0x16], -(int32_t)h);
+        put_u32le(&header[0x22], (uint32_t)(sizeof(pixels[0]) * w * h + 2));
+        fwrite(header, 1, sizeof(header), f);
+    }
+    fwrite(pixels, 1, sizeof(pixels[0]) * w * h, f);
+    fclose(f);
+
+    fprintf(stderr, "Wrote screenshot %s\n", path);
+    return 0;
+}
