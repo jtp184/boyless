@@ -21,6 +21,23 @@ void hang_tracker_init(hang_tracker_t *t);
    (limit == 0 disables and always returns false). */
 bool hang_tracker_update(hang_tracker_t *t, uint64_t hash, unsigned limit);
 
+typedef enum {
+    SETTLE_CONTINUE,  /* keep advancing frames */
+    SETTLE_STABLE,    /* screen held steady for `target` frames */
+    SETTLE_TIMEOUT,   /* `ceiling` frames elapsed without stabilizing */
+} settle_status_t;
+
+typedef struct {
+    hang_tracker_t inner;  /* counts consecutive identical frames */
+    unsigned       waited; /* total frames advanced this settle */
+} settle_tracker_t;
+
+void settle_tracker_init(settle_tracker_t *t);
+/* Feed one frame's hash. `target` = frames of stability required (>= 1);
+   `ceiling` = max frames to wait (0 disables the timeout). */
+settle_status_t settle_tracker_update(settle_tracker_t *t, uint64_t hash,
+                                      unsigned target, unsigned ceiling);
+
 typedef struct {
     uint32_t   *framebuffer;          /* GB_set_pixels_output target */
     const char *screenshot_basename;  /* for auto-named screenshots */

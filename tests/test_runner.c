@@ -34,8 +34,43 @@ static void test_hang_tracker_disabled(void)
     }
 }
 
+static void test_settle_stabilizes(void)
+{
+    settle_tracker_t t;
+    settle_tracker_init(&t);
+    assert(settle_tracker_update(&t, 1, 3, 100) == SETTLE_CONTINUE); /* prime */
+    assert(settle_tracker_update(&t, 2, 3, 100) == SETTLE_CONTINUE); /* changed */
+    assert(settle_tracker_update(&t, 9, 3, 100) == SETTLE_CONTINUE); /* changed */
+    assert(settle_tracker_update(&t, 9, 3, 100) == SETTLE_CONTINUE); /* stale=1 */
+    assert(settle_tracker_update(&t, 9, 3, 100) == SETTLE_CONTINUE); /* stale=2 */
+    assert(settle_tracker_update(&t, 9, 3, 100) == SETTLE_STABLE);   /* stale=3 */
+}
+
+static void test_settle_times_out(void)
+{
+    settle_tracker_t t;
+    settle_tracker_init(&t);
+    settle_status_t s = SETTLE_CONTINUE;
+    for (unsigned i = 0; i < 5; i++) {
+        s = settle_tracker_update(&t, i, 3, 5); /* hashes always change */
+    }
+    assert(s == SETTLE_TIMEOUT); /* waited reaches ceiling 5 before stabilizing */
+}
+
+static void test_settle_no_ceiling(void)
+{
+    settle_tracker_t t;
+    settle_tracker_init(&t);
+    for (unsigned i = 0; i < 50; i++) {
+        assert(settle_tracker_update(&t, i, 3, 0) == SETTLE_CONTINUE); /* ceiling 0 never times out */
+    }
+}
+
 int main(void)
 {
+    test_settle_stabilizes();
+    test_settle_times_out();
+    test_settle_no_ceiling();
     test_hash_changes_with_content();
     test_hang_tracker();
     test_hang_tracker_disabled();
