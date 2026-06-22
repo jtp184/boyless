@@ -1,4 +1,5 @@
 #include "screenshot.h"
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -97,4 +98,48 @@ int screenshot_write(const char *path, const uint32_t *pixels,
 
     fprintf(stderr, "Wrote screenshot %s\n", path);
     return 0;
+}
+
+int screenshot_read(const char *path, uint32_t *pixels, size_t max_pixels,
+                    unsigned *width, unsigned *height)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) return -1;
+
+    int rc = -1;
+    unsigned w = 0, h = 0;
+    long header_size = 0;
+
+    if (use_tga) {
+        uint8_t hdr[sizeof(tga_header_template)];
+        if (fread(hdr, 1, sizeof(hdr), f) != sizeof(hdr)) goto done;
+        w = (unsigned)hdr[0xC] | ((unsigned)hdr[0xD] << 8);
+        h = (unsigned)hdr[0xE] | ((unsigned)hdr[0xF] << 8);
+        header_size = (long)sizeof(hdr);
+    }
+    else {
+        uint8_t hdr[sizeof(bmp_header_template)];
+        if (fread(hdr, 1, sizeof(hdr), f) != sizeof(hdr)) goto done;
+        if (hdr[0] != 0x42 || hdr[1] != 0x4D) goto done; /* 'BM' */
+        w = (unsigned)hdr[0x12] | ((unsigned)hdr[0x13] << 8)
+          | ((unsigned)hdr[0x14] << 16) | ((unsigned)hdr[0x15] << 24);
+        int32_t sh = (int32_t)((uint32_t)hdr[0x16] | ((uint32_t)hdr[0x17] << 8)
+          | ((uint32_t)hdr[0x18] << 16) | ((uint32_t)hdr[0x19] << 24));
+        h = (unsigned)(sh < 0 ? -sh : sh);
+        header_size = (long)sizeof(hdr);
+    }
+
+    if (w == 0 || h == 0) goto done;
+    if ((size_t)w * h > max_pixels) goto done;
+
+    if (fseek(f, header_size, SEEK_SET) != 0) goto done;
+    size_t n = (size_t)w * h;
+    if (fread(pixels, sizeof(uint32_t), n, f) != n) goto done;
+
+    *width = w;
+    *height = h;
+    rc = 0;
+done:
+    fclose(f);
+    return rc;
 }
