@@ -8,6 +8,7 @@
 
 #include "screenshot.h"
 #include "script.h"
+#include "symbols.h"
 #include "runner.h"
 
 #define BOYLESS_VERSION "0.1.0"
@@ -57,6 +58,7 @@ static void usage(const char *argv0)
         "Usage: %s [options] [script-file | -]\n"
         "  --rom <path>          ROM to load (required)\n"
         "  --script <path>       script file ('-' or omitted reads stdin)\n"
+        "  --sym <path>          .sym file; {symbol} refs in the script expand to addresses\n"
         "  --boot <path>         boot ROM (defaults per model)\n"
         "  --model <dmg|cgb|sgb> emulated model (default cgb)\n"
         "  --tga                 write TGA screenshots instead of BMP\n"
@@ -74,6 +76,7 @@ int main(int argc, char **argv)
 {
     const char *rom_path = NULL;
     const char *script_path = NULL;
+    const char *sym_path = NULL;
     const char *boot_path = NULL;
     const char *model_name = "cgb";
     const char *screenshot_dir = ".";
@@ -105,6 +108,7 @@ int main(int argc, char **argv)
         else if (strcmp(a, "--reference-dir") == 0)  { REQUIRE_VALUE(reference_dir); }
         else if (strcmp(a, "--rom") == 0)            { REQUIRE_VALUE(rom_path); }
         else if (strcmp(a, "--script") == 0)         { REQUIRE_VALUE(script_path); }
+        else if (strcmp(a, "--sym") == 0)            { REQUIRE_VALUE(sym_path); }
         else if (strcmp(a, "--boot") == 0)           { REQUIRE_VALUE(boot_path); }
         else if (strcmp(a, "--model") == 0)          { REQUIRE_VALUE(model_name); }
         else if (strcmp(a, "--hang-timeout") == 0) {
@@ -160,8 +164,15 @@ int main(int argc, char **argv)
     GB_set_emulate_joypad_bouncing(&gb, false);
     GB_set_turbo_mode(&gb, true, true); /* run fast, never skip rendering */
 
+    symbols_t *syms = NULL;
+    if (sym_path && !symbols_load(sym_path, &syms)) {
+        GB_free(&gb);
+        return 1;
+    }
+
     script_t script = {0};
-    if (!script_parse_path(script_path, &script)) {
+    if (!script_parse_path(script_path, syms, &script)) {
+        symbols_free(syms);
         GB_free(&gb);
         return 1;
     }
@@ -181,6 +192,7 @@ int main(int argc, char **argv)
             result.frames_run, result.screenshots_written, result.failures);
 
     script_free(&script);
+    symbols_free(syms);
     GB_free(&gb);
 
     if (result.failures > 0 && !report_only) return 1;

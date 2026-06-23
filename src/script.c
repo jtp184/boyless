@@ -1,4 +1,5 @@
 #include "script.h"
+#include "symbols.h"
 #include <ctype.h>
 #include <limits.h>
 #include <stdint.h>
@@ -69,7 +70,7 @@ static bool parse_byte(const char *s, unsigned *out)
     return true;
 }
 
-bool script_parse_stream(FILE *f, const char *label, script_t *out)
+bool script_parse_stream(FILE *f, const char *label, const symbols_t *syms, script_t *out)
 {
     out->commands = NULL;
     out->count = 0;
@@ -98,6 +99,23 @@ bool script_parse_stream(FILE *f, const char *label, script_t *out)
         }
 
         if (ntokens == 0) continue;
+
+        /* Resolve {symbol} / {symbol+/-N} references before dispatch so symbols
+           work in any field. Non-reference tokens pass through untouched. */
+        char expanded[4][16];
+        bool expand_failed = false;
+        for (unsigned t = 0; t < ntokens; t++) {
+            char err[128];
+            bool was_ref = false;
+            if (!symbols_expand_token(syms, tokens[t], expanded[t],
+                                      sizeof(expanded[t]), err, sizeof(err), &was_ref)) {
+                fprintf(stderr, "%s:%u: %s\n", label, line_no, err);
+                expand_failed = true;
+                break;
+            }
+            if (was_ref) tokens[t] = expanded[t];
+        }
+        if (expand_failed) { error = true; break; }
 
         if (count == capacity) {
             capacity *= 2;
@@ -176,6 +194,21 @@ bool script_parse_stream(FILE *f, const char *label, script_t *out)
             cmd->has_number = true;
             cmd->type = CMD_COMPARE;
         }
+        else if (strcasecmp(verb, "differ") == 0) {
+            if (ntokens != 2 || !parse_uint(tokens[1], &cmd->number)) {
+                fprintf(stderr, "%s:%u: 'differ' needs a baseline id number\n", label, line_no);
+                error = true; break;
+            }
+            cmd->has_number = true;
+            cmd->type = CMD_DIFFER;
+        }
+        else if (strcasecmp(verb, "noblank") == 0) {
+            if (ntokens != 1) {
+                fprintf(stderr, "%s:%u: 'noblank' takes no arguments\n", label, line_no);
+                error = true; break;
+            }
+            cmd->type = CMD_NOBLANK;
+        }
         else if (strcasecmp(verb, "memory") == 0) {
             if (ntokens < 2 || ntokens > 3 || !parse_hex16(tokens[1], &cmd->addr)) {
                 fprintf(stderr, "%s:%u: 'memory' needs a 16-bit hex address and optional value\n", label, line_no);
@@ -208,10 +241,10 @@ bool script_parse_stream(FILE *f, const char *label, script_t *out)
     return true;
 }
 
-bool script_parse_path(const char *path, script_t *out)
+bool script_parse_path(const char *path, const symbols_t *syms, script_t *out)
 {
     if (!path || strcmp(path, "-") == 0) {
-        return script_parse_stream(stdin, "<stdin>", out);
+        return script_parse_stream(stdin, "<stdin>", syms, out);
     }
     FILE *f = fopen(path, "r");
     if (!f) {
@@ -220,7 +253,7 @@ bool script_parse_path(const char *path, script_t *out)
         out->count = 0;
         return false;
     }
-    bool ok = script_parse_stream(f, path, out);
+    bool ok = script_parse_stream(f, path, syms, out);
     fclose(f);
     return ok;
 }

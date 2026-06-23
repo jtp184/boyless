@@ -143,4 +143,88 @@ grep -q "expected" "$WORK/ro_stderr.txt" \
     || { echo "FAIL: --report-only suppressed the failure message"; exit 1; }
 echo "PASS: --report-only reports failures but exits 0"
 
+# 10. symbols: {wValue} from mem.sym resolves to $C000, so `memory {wValue} $42`
+# passes exactly like the literal-address form.
+printf 'wait 200\nmemory {wValue} $42\n' \
+    | "$BOYLESS" --model dmg --rom "$ROMS/mem.gb" --sym "$ROMS/mem.sym" \
+        --hang-timeout 0 -
+echo "PASS: symbol resolves to the right address"
+
+# unknown symbol is a parse error (non-zero exit, clear message).
+_sym_rc=0
+printf 'wait 200\nmemory {nope} $42\n' \
+    | "$BOYLESS" --model dmg --rom "$ROMS/mem.gb" --sym "$ROMS/mem.sym" \
+        --hang-timeout 0 - 2>"$WORK/sym_unknown.txt" || _sym_rc=$?
+if [ "$_sym_rc" -eq 0 ]; then
+    echo "FAIL: unknown symbol did not exit non-zero"; exit 1
+fi
+grep -q "unknown symbol" "$WORK/sym_unknown.txt" \
+    || { echo "FAIL: unknown symbol message missing"; exit 1; }
+echo "PASS: unknown symbol fails clearly"
+
+# a {symbol} reference without --sym is a parse error.
+_nosym_rc=0
+printf 'wait 200\nmemory {wValue} $42\n' \
+    | "$BOYLESS" --model dmg --rom "$ROMS/mem.gb" --hang-timeout 0 - \
+    2>"$WORK/sym_missing.txt" || _nosym_rc=$?
+if [ "$_nosym_rc" -eq 0 ]; then
+    echo "FAIL: {symbol} without --sym did not exit non-zero"; exit 1
+fi
+grep -q "requires a --sym" "$WORK/sym_missing.txt" \
+    || { echo "FAIL: missing --sym message wrong"; exit 1; }
+echo "PASS: {symbol} without --sym fails clearly"
+
+# 11. differ: capture a baseline, change the screen with a held button, then
+# `differ` passes (screen changed). input.gb renders distinct screens per button.
+DIF="$WORK/differ"; mkdir -p "$DIF"
+printf 'wait 300\nscreenshot 0\ndown a\nwait 60\ndiffer 0\n' \
+    | "$BOYLESS" --model cgb --rom "$ROMS/input.gb" --hang-timeout 0 \
+        --screenshot-dir "$DIF" -
+echo "PASS: differ passes when the screen changed"
+
+# differ fails when the screen is unchanged. fill.gb is static after boot, so a
+# baseline captured then re-checked without input is identical => failure.
+DIFS="$WORK/differ_same"; mkdir -p "$DIFS"
+_dif_rc=0
+printf 'wait 300\nscreenshot 0\nwait 60\ndiffer 0\n' \
+    | "$BOYLESS" --model dmg --rom "$ROMS/fill.gb" --hang-timeout 0 \
+        --screenshot-dir "$DIFS" - 2>"$WORK/differ_same.txt" || _dif_rc=$?
+if [ "$_dif_rc" -eq 0 ]; then
+    echo "FAIL: differ on an unchanged screen did not exit non-zero"; exit 1
+fi
+grep -q "requires a change" "$WORK/differ_same.txt" \
+    || { echo "FAIL: differ-unchanged message wrong"; exit 1; }
+echo "PASS: differ fails when the screen is unchanged"
+
+# differ fails when the baseline file is missing.
+DIFM="$WORK/differ_missing"; mkdir -p "$DIFM"
+_difm_rc=0
+printf 'wait 300\ndiffer 0\n' \
+    | "$BOYLESS" --model dmg --rom "$ROMS/fill.gb" --hang-timeout 0 \
+        --screenshot-dir "$DIFM" - 2>"$WORK/differ_missing.txt" || _difm_rc=$?
+if [ "$_difm_rc" -eq 0 ]; then
+    echo "FAIL: differ with no baseline did not exit non-zero"; exit 1
+fi
+grep -q "cannot read baseline" "$WORK/differ_missing.txt" \
+    || { echo "FAIL: differ-missing-baseline message wrong"; exit 1; }
+echo "PASS: differ fails when the baseline is missing"
+
+# 12. noblank: mem.gb renders a non-blank screen after boot (the DMG boot ROM
+# leaves mixed VRAM content visible), so `noblank` passes (exit 0).
+printf 'wait 200\nnoblank\n' \
+    | "$BOYLESS" --model dmg --rom "$ROMS/mem.gb" --hang-timeout 0 -
+echo "PASS: noblank passes on a non-blank screen"
+
+# noblank fails on blank.gb, which renders a single flat colour.
+_nb_rc=0
+printf 'wait 200\nnoblank\n' \
+    | "$BOYLESS" --model dmg --rom "$ROMS/blank.gb" --hang-timeout 0 - \
+    2>"$WORK/noblank.txt" || _nb_rc=$?
+if [ "$_nb_rc" -eq 0 ]; then
+    echo "FAIL: noblank on a blank screen did not exit non-zero"; exit 1
+fi
+grep -q "screen is blank" "$WORK/noblank.txt" \
+    || { echo "FAIL: noblank-blank message wrong"; exit 1; }
+echo "PASS: noblank fails on a blank screen"
+
 echo "integration: OK"

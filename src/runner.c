@@ -18,6 +18,15 @@ uint64_t framebuffer_hash(const uint32_t *pixels, size_t pixel_count)
     return h;
 }
 
+bool framebuffer_is_blank(const uint32_t *pixels, size_t pixel_count)
+{
+    if (pixel_count == 0) return true;
+    uint32_t first = pixels[0];
+    for (size_t i = 1; i < pixel_count; i++)
+        if (pixels[i] != first) return false;
+    return true;
+}
+
 void hang_tracker_init(hang_tracker_t *t)
 {
     t->last_hash = 0;
@@ -93,6 +102,23 @@ static int write_numbered(GB_gameboy_t *gb, const char *dir, unsigned id,
     return screenshot_write(path, cfg->framebuffer, w, h);
 }
 
+/* Read <dir>/screenshot_NNN.<ext> into a shared scratch buffer. On success
+   returns the pixel buffer and fills *w,*h; on failure returns NULL. `path_out`
+   always receives the constructed path so the caller can name it in diagnostics.
+   The buffer is static scratch, valid until the next read_numbered call — fine
+   because commands run one at a time. */
+static const uint32_t *read_numbered(const char *dir, unsigned id,
+                                     unsigned *w, unsigned *h,
+                                     char *path_out, size_t path_sz)
+{
+    snprintf(path_out, path_sz, "%s/screenshot_%03u.%s",
+             dir, id, screenshot_extension());
+    static uint32_t buf[256 * 224];
+    *w = 0; *h = 0;
+    if (screenshot_read(path_out, buf, 256 * 224, w, h) != 0) return NULL;
+    return buf;
+}
+
 /* Returns true if the comparison failed. */
 static bool do_compare(GB_gameboy_t *gb, const command_t *cmd,
                        const runner_config_t *cfg, runner_result_t *result)
@@ -113,12 +139,10 @@ static bool do_compare(GB_gameboy_t *gb, const command_t *cmd,
     unsigned h = GB_get_screen_height(gb);
 
     char ref_path[1200];
-    snprintf(ref_path, sizeof(ref_path), "%s/screenshot_%03u.%s",
-             cfg->reference_dir, cmd->number, screenshot_extension());
-
-    static uint32_t ref[256 * 224];
-    unsigned rw = 0, rh = 0;
-    if (screenshot_read(ref_path, ref, 256 * 224, &rw, &rh) != 0) {
+    unsigned rw, rh;
+    const uint32_t *ref = read_numbered(cfg->reference_dir, cmd->number,
+                                        &rw, &rh, ref_path, sizeof(ref_path));
+    if (!ref) {
         fprintf(stderr, "compare (line %u): cannot read reference '%s'\n",
                 cmd->line, ref_path);
         result->failures++;
@@ -144,6 +168,34 @@ static bool do_compare(GB_gameboy_t *gb, const command_t *cmd,
     return false;
 }
 
+/* Returns true if the difference assertion failed (screen unchanged/missing). */
+static bool do_differ(GB_gameboy_t *gb, const command_t *cmd,
+                      const runner_config_t *cfg, runner_result_t *result)
+{
+    unsigned w = GB_get_screen_width(gb);
+    unsigned h = GB_get_screen_height(gb);
+
+    char base_path[1200];
+    unsigned bw, bh;
+    const uint32_t *base = read_numbered(cfg->screenshot_dir, cmd->number,
+                                         &bw, &bh, base_path, sizeof(base_path));
+    if (!base) {
+        fprintf(stderr, "differ (line %u): cannot read baseline '%s'\n",
+                cmd->line, base_path);
+        result->failures++;
+        return true;
+    }
+    if (bw == w && bh == h &&
+        memcmp(base, cfg->framebuffer, (size_t)w * h * sizeof(uint32_t)) == 0) {
+        fprintf(stderr, "differ (line %u): screen still matches '%s' "
+                        "but differ requires a change\n",
+                cmd->line, base_path);
+        result->failures++;
+        return true;
+    }
+    return false;
+}
+
 /* Returns true if the assertion failed. */
 static bool do_memory(GB_gameboy_t *gb, const command_t *cmd, runner_result_t *result)
 {
@@ -155,6 +207,22 @@ static bool do_memory(GB_gameboy_t *gb, const command_t *cmd, runner_result_t *r
     if (v != (uint8_t)cmd->value) {
         fprintf(stderr, "memory (line %u): $%04X = $%02X (%u), expected $%02X (%u)\n",
                 cmd->line, cmd->addr, v, v, cmd->value, cmd->value);
+        result->failures++;
+        return true;
+    }
+    return false;
+}
+
+/* Returns true if the assertion failed (screen is blank). */
+static bool do_noblank(GB_gameboy_t *gb, const command_t *cmd,
+                       const runner_config_t *cfg, runner_result_t *result)
+{
+    unsigned w = GB_get_screen_width(gb);
+    unsigned h = GB_get_screen_height(gb);
+    size_t n = (size_t)w * h;
+    if (framebuffer_is_blank(cfg->framebuffer, n)) {
+        fprintf(stderr, "noblank (line %u): screen is blank (all %zu pixels identical)\n",
+                cmd->line, n);
         result->failures++;
         return true;
     }
@@ -247,8 +315,17 @@ void runner_run(GB_gameboy_t *gb, const script_t *script,
                 if (failed && cfg->fail_fast) stop = true;
                 break;
             }
+            case CMD_DIFFER: {
+                bool failed = do_differ(gb, cmd, cfg, result);
+                if (cmd->number >= next_id) next_id = cmd->number + 1;
+                if (failed && cfg->fail_fast) stop = true;
+                break;
+            }
             case CMD_MEMORY:
                 if (do_memory(gb, cmd, result) && cfg->fail_fast) stop = true;
+                break;
+            case CMD_NOBLANK:
+                if (do_noblank(gb, cmd, cfg, result) && cfg->fail_fast) stop = true;
                 break;
         }
     }

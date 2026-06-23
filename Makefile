@@ -9,7 +9,7 @@ SB_BOOT  := $(SAMEBOY)/build/bin/BootROMs
 CFLAGS   := -std=gnu11 -Wall -Wextra -I$(SAMEBOY) -Isrc
 LDFLAGS  := -lm
 
-SRC      := src/screenshot.c src/script.c src/runner.c src/main.c
+SRC      := src/screenshot.c src/script.c src/runner.c src/symbols.c src/main.c
 OBJ      := $(patsubst src/%.c,build/obj/%.o,$(SRC))
 
 BOOTROMS := dmg_boot.bin cgb_boot.bin sgb2_boot.bin
@@ -19,7 +19,7 @@ BOOT_OUT := $(patsubst %,build/bin/%,$(BOOTROMS))
 all: build/bin/boyless $(BOOT_OUT)
 
 # Assembly test ROMs (RGBDS).
-testroms: build/testroms/fill.gb build/testroms/input.gb build/testroms/mem.gb
+testroms: build/testroms/fill.gb build/testroms/input.gb build/testroms/mem.gb build/testroms/mem.sym build/testroms/blank.gb
 
 build/testroms/fill.gb: testroms/fill.asm
 	@mkdir -p $(dir $@)
@@ -33,10 +33,19 @@ build/testroms/input.gb: testroms/input.asm
 	$(RGBLINK) -o $@ build/testroms/input.o
 	$(RGBFIX) -v -C -p 0xFF $@
 
-build/testroms/mem.gb: testroms/mem.asm
-	@mkdir -p $(dir $@)
+# mem.gb and mem.sym are produced by one rgblink invocation. A grouped target
+# (&:) tells Make both come from a single recipe run, so deleting either one
+# (e.g. a stale mem.sym while mem.gb is current) triggers a correct rebuild.
+build/testroms/mem.gb build/testroms/mem.sym &: testroms/mem.asm
+	@mkdir -p build/testroms
 	$(RGBASM) -o build/testroms/mem.o $<
-	$(RGBLINK) -o $@ build/testroms/mem.o
+	$(RGBLINK) -n build/testroms/mem.sym -o build/testroms/mem.gb build/testroms/mem.o
+	$(RGBFIX) -v -p 0xFF build/testroms/mem.gb
+
+build/testroms/blank.gb: testroms/blank.asm
+	@mkdir -p $(dir $@)
+	$(RGBASM) -o build/testroms/blank.o $<
+	$(RGBLINK) -o $@ build/testroms/blank.o
 	$(RGBFIX) -v -p 0xFF $@
 
 integration: all testroms
@@ -70,19 +79,24 @@ build/bin/%.bin: $(SB_BOOT)/%.bin
 clean:
 	rm -rf build
 
-test: build/test_screenshot build/test_script build/test_runner
+test: build/test_screenshot build/test_script build/test_runner build/test_symbols
 	./build/test_screenshot
 	./build/test_script
 	./build/test_runner
+	./build/test_symbols
 
 build/test_screenshot: tests/test_screenshot.c src/screenshot.c | $(SB_STAMP)
 	@mkdir -p build
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
-build/test_script: tests/test_script.c src/script.c | $(SB_STAMP)
+build/test_script: tests/test_script.c src/script.c src/symbols.c | $(SB_STAMP)
 	@mkdir -p build
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 build/test_runner: tests/test_runner.c src/runner.c src/screenshot.c | $(SB_STAMP)
 	@mkdir -p build
 	$(CC) $(CFLAGS) $^ $(SB_LIB) -o $@ $(LDFLAGS)
+
+build/test_symbols: tests/test_symbols.c src/symbols.c | $(SB_STAMP)
+	@mkdir -p build
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
