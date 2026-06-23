@@ -1,4 +1,5 @@
 #include "script.h"
+#include <ctype.h>
 #include <limits.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -30,13 +31,15 @@ static bool parse_uint(const char *s, unsigned *out)
     return true;
 }
 
-/* Parse a 16-bit hex address. Accepts an optional '$' or '0x' prefix. */
+/* Parse a 16-bit hex address. Accepts an optional '$' prefix. Every remaining
+   character must be a hex digit, so signs and a '0x' prefix are rejected. */
 static bool parse_hex16(const char *s, uint16_t *out)
 {
     if (!s || !*s) return false;
     if (s[0] == '$') s++;
-    else if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) s += 2;
     if (!*s) return false;
+    for (const char *p = s; *p; p++)
+        if (!isxdigit((unsigned char)*p)) return false;
     char *end;
     unsigned long v = strtoul(s, &end, 16);
     if (*end != 0) return false;
@@ -45,14 +48,19 @@ static bool parse_hex16(const char *s, uint16_t *out)
     return true;
 }
 
-/* Parse a single byte value. Decimal by default; '$' or '0x' prefix = hex. */
+/* Parse a single byte value. Decimal by default; a '$' prefix selects hex.
+   Every remaining character must be a digit of the chosen base, so signs and
+   a '0x' prefix are rejected. */
 static bool parse_byte(const char *s, unsigned *out)
 {
     if (!s || !*s) return false;
     int base = 10;
     if (s[0] == '$') { s++; base = 16; }
-    else if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) { s += 2; base = 16; }
-    if (!*s || s[0] == '-' || s[0] == '+') return false;
+    if (!*s) return false;
+    for (const char *p = s; *p; p++) {
+        int ok = base == 16 ? isxdigit((unsigned char)*p) : isdigit((unsigned char)*p);
+        if (!ok) return false;
+    }
     char *end;
     unsigned long v = strtoul(s, &end, base);
     if (*end != 0) return false;

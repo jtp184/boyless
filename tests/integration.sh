@@ -99,4 +99,17 @@ fi
 test -s "$WORK/screenshot_000.actual.bmp" || { echo "FAIL: no .actual dump on mismatch"; exit 1; }
 echo "PASS: compare mismatch fails and dumps actual frame"
 
+# 6. shared id counter advances forward only: an explicit lower id must not
+# rewind it. After `screenshot 5` then `screenshot 2`, a bare `screenshot`
+# auto-numbers to 6 (max seen + 1), not 3.
+CNT="$WORK/counter"; mkdir -p "$CNT"
+printf 'wait 300\nscreenshot 5\nscreenshot 2\nscreenshot\n' \
+    | "$BOYLESS" --model dmg --rom "$ROMS/fill.gb" --hang-timeout 0 \
+        --screenshot-dir "$CNT" -
+test -s "$CNT/screenshot_005.bmp" || { echo "FAIL: explicit id 5 not written"; exit 1; }
+test -s "$CNT/screenshot_002.bmp" || { echo "FAIL: explicit id 2 not written"; exit 1; }
+test -s "$CNT/screenshot_006.bmp" || { echo "FAIL: auto id did not advance to 6 (counter rewound)"; exit 1; }
+test ! -e "$CNT/screenshot_003.bmp" || { echo "FAIL: auto id rewound to 3"; exit 1; }
+echo "PASS: shared id counter advances forward only"
+
 echo "integration: OK"

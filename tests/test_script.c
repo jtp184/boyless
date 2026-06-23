@@ -63,7 +63,11 @@ static void test_rejections(void)
     assert(!parse_str("memory\n", &s));       /* memory needs an address */
     assert(!parse_str("memory G000\n", &s));  /* bad hex */
     assert(!parse_str("memory 10000\n", &s)); /* address out of 16-bit range */
+    assert(!parse_str("memory 0xC000\n", &s)); /* '0x' prefix not accepted */
+    assert(!parse_str("memory -1\n", &s));    /* signed address rejected */
     assert(!parse_str("memory C000 256\n", &s)); /* value out of byte range */
+    assert(!parse_str("memory C000 0x42\n", &s)); /* '0x' value prefix not accepted */
+    assert(!parse_str("memory C000 -1\n", &s)); /* signed value rejected */
     assert(!parse_str("frobnicate\n", &s));   /* unknown command */
 }
 

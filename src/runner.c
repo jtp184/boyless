@@ -87,8 +87,14 @@ static bool do_compare(GB_gameboy_t *gb, const command_t *cmd,
                        const runner_config_t *cfg, runner_result_t *result)
 {
     if (cfg->update_mode) {
-        if (write_numbered(gb, cfg->reference_dir, cmd->number, "", cfg) == 0)
-            result->screenshots_written++;
+        if (write_numbered(gb, cfg->reference_dir, cmd->number, "", cfg) != 0) {
+            fprintf(stderr, "compare (line %u): failed to write reference "
+                            "'%s/screenshot_%03u.%s'\n",
+                    cmd->line, cfg->reference_dir, cmd->number, screenshot_extension());
+            result->failures++;
+            return true;
+        }
+        result->screenshots_written++;
         return false;
     }
 
@@ -109,12 +115,18 @@ static bool do_compare(GB_gameboy_t *gb, const command_t *cmd,
     }
     if (rw != w || rh != h ||
         memcmp(ref, cfg->framebuffer, (size_t)w * h * sizeof(uint32_t)) != 0) {
-        if (write_numbered(gb, cfg->screenshot_dir, cmd->number, ".actual", cfg) == 0)
+        if (write_numbered(gb, cfg->screenshot_dir, cmd->number, ".actual", cfg) == 0) {
             result->screenshots_written++;
-        fprintf(stderr, "compare (line %u): screen differs from '%s' "
-                        "(wrote actual to %s/screenshot_%03u.actual.%s)\n",
-                cmd->line, ref_path, cfg->screenshot_dir, cmd->number,
-                screenshot_extension());
+            fprintf(stderr, "compare (line %u): screen differs from '%s' "
+                            "(wrote actual to %s/screenshot_%03u.actual.%s)\n",
+                    cmd->line, ref_path, cfg->screenshot_dir, cmd->number,
+                    screenshot_extension());
+        }
+        else {
+            fprintf(stderr, "compare (line %u): screen differs from '%s' "
+                            "(failed to write actual frame)\n",
+                    cmd->line, ref_path);
+        }
         result->failures++;
         return true;
     }
@@ -211,14 +223,16 @@ void runner_run(GB_gameboy_t *gb, const script_t *script,
                 break;
             case CMD_SCREENSHOT: {
                 unsigned id = cmd->has_number ? cmd->number : next_id;
-                next_id = id + 1;
+                /* Advance the shared counter forward only — an explicit lower
+                   id must not rewind it and let a later auto id overwrite. */
+                if (id >= next_id) next_id = id + 1;
                 if (write_numbered(gb, cfg->screenshot_dir, id, "", cfg) == 0)
                     result->screenshots_written++;
                 break;
             }
             case CMD_COMPARE: {
                 bool failed = do_compare(gb, cmd, cfg, result);
-                next_id = cmd->number + 1;
+                if (cmd->number >= next_id) next_id = cmd->number + 1;
                 if (failed && cfg->fail_fast) stop = true;
                 break;
             }
