@@ -77,11 +77,12 @@ static void test_valid_script(void)
         "screenshot\n"
         "screenshot 7\n"
         "compare 7\n"
+        "differ 7\n"
         "memory C000\n"
         "memory $C000 $42\n"
         "memory FF40 144\n";
     assert(parse_str(text, &s));
-    assert(s.count == 12);
+    assert(s.count == 13);
     assert(s.commands[0].type == CMD_WAIT   && s.commands[0].count == 30);
     assert(s.commands[1].type == CMD_SETTLE && s.commands[1].count == 10);
     assert(s.commands[2].type == CMD_PRESS  && s.commands[2].key == GB_KEY_A && s.commands[2].count == 2);
@@ -91,9 +92,10 @@ static void test_valid_script(void)
     assert(s.commands[6].type == CMD_SCREENSHOT && s.commands[6].has_number == false);
     assert(s.commands[7].type == CMD_SCREENSHOT && s.commands[7].has_number && s.commands[7].number == 7);
     assert(s.commands[8].type == CMD_COMPARE && s.commands[8].number == 7);
-    assert(s.commands[9].type  == CMD_MEMORY && s.commands[9].addr == 0xC000 && s.commands[9].has_value == false);
-    assert(s.commands[10].type == CMD_MEMORY && s.commands[10].addr == 0xC000 && s.commands[10].has_value && s.commands[10].value == 0x42);
-    assert(s.commands[11].type == CMD_MEMORY && s.commands[11].addr == 0xFF40 && s.commands[11].has_value && s.commands[11].value == 144);
+    assert(s.commands[9].type == CMD_DIFFER && s.commands[9].number == 7);
+    assert(s.commands[10].type  == CMD_MEMORY && s.commands[10].addr == 0xC000 && s.commands[10].has_value == false);
+    assert(s.commands[11].type == CMD_MEMORY && s.commands[11].addr == 0xC000 && s.commands[11].has_value && s.commands[11].value == 0x42);
+    assert(s.commands[12].type == CMD_MEMORY && s.commands[12].addr == 0xFF40 && s.commands[12].has_value && s.commands[12].value == 144);
     script_free(&s);
 }
 
@@ -111,6 +113,7 @@ static void test_rejections(void)
     assert(!parse_str("screenshot a b\n", &s)); /* too many args */
     assert(!parse_str("screenshot foo\n", &s)); /* non-numeric id */
     assert(!parse_str("compare\n", &s));      /* compare needs a number */
+    assert(!parse_str("differ\n", &s));       /* differ needs a number */
     assert(!parse_str("memory\n", &s));       /* memory needs an address */
     assert(!parse_str("memory G000\n", &s));  /* bad hex */
     assert(!parse_str("memory 10000\n", &s)); /* address out of 16-bit range */

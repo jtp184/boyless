@@ -194,6 +194,14 @@ bool script_parse_stream(FILE *f, const char *label, const symbols_t *syms, scri
             cmd->has_number = true;
             cmd->type = CMD_COMPARE;
         }
+        else if (strcasecmp(verb, "differ") == 0) {
+            if (ntokens != 2 || !parse_uint(tokens[1], &cmd->number)) {
+                fprintf(stderr, "%s:%u: 'differ' needs a baseline id number\n", label, line_no);
+                error = true; break;
+            }
+            cmd->has_number = true;
+            cmd->type = CMD_DIFFER;
+        }
         else if (strcasecmp(verb, "memory") == 0) {
             if (ntokens < 2 || ntokens > 3 || !parse_hex16(tokens[1], &cmd->addr)) {
                 fprintf(stderr, "%s:%u: 'memory' needs a 16-bit hex address and optional value\n", label, line_no);

@@ -16,6 +16,7 @@ typedef enum {
     CMD_UP,          /* key released */
     CMD_SCREENSHOT,  /* number/has_number = explicit id, else auto */
     CMD_COMPARE,     /* number = reference id to assert against */
+    CMD_DIFFER,      /* number = baseline id to assert difference from */
     CMD_MEMORY,      /* addr; value/has_value = assert, else print */
 } cmd_type_t;
 
