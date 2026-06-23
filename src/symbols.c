@@ -1,5 +1,6 @@
 #include "symbols.h"
 #include <ctype.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -112,4 +113,95 @@ void symbols_free(symbols_t *syms)
     for (size_t i = 0; i < syms->count; i++) free(syms->entries[i].name);
     free(syms->entries);
     free(syms);
+}
+
+/* Parse an offset string (after the +/- sign). Decimal, or $hex with a '$'
+   prefix. Every remaining char must be a digit of the chosen base. */
+static bool parse_offset(const char *s, unsigned long *out)
+{
+    if (!s || !*s) return false;
+    int base = 10;
+    if (s[0] == '$') { s++; base = 16; }
+    if (!*s) return false;
+    for (const char *p = s; *p; p++) {
+        int ok = base == 16 ? isxdigit((unsigned char)*p) : isdigit((unsigned char)*p);
+        if (!ok) return false;
+    }
+    char *end;
+    errno = 0;
+    *out = strtoul(s, &end, base);
+    if (errno == ERANGE) return false;
+    return *end == 0;
+}
+
+bool symbols_expand_token(const symbols_t *syms, const char *token,
+                          char *out, size_t out_len,
+                          char *errbuf, size_t err_len, bool *was_ref)
+{
+    *was_ref = false;
+    if (!token) {
+        snprintf(errbuf, err_len, "null token");
+        return false;
+    }
+    *was_ref = (token[0] == '{');
+
+    if (!*was_ref) {
+        if (strchr(token, '}')) {
+            snprintf(errbuf, err_len, "malformed symbol reference '%s'", token);
+            return false;
+        }
+        snprintf(out, out_len, "%s", token);   /* plain token, copied verbatim */
+        return true;
+    }
+
+    if (!syms) {
+        snprintf(errbuf, err_len, "symbol reference '%s' requires a --sym file", token);
+        return false;
+    }
+
+    size_t len = strlen(token);
+    if (len < 3 || token[len - 1] != '}') {
+        snprintf(errbuf, err_len, "malformed symbol reference '%s'", token);
+        return false;
+    }
+
+    char inner[256];
+    size_t inner_len = len - 2;                 /* strip the braces */
+    if (inner_len >= sizeof(inner)) {
+        snprintf(errbuf, err_len, "symbol reference too long '%s'", token);
+        return false;
+    }
+    memcpy(inner, token + 1, inner_len);
+    inner[inner_len] = 0;
+
+    /* Split name from an optional signed offset at the first +/-. RGBDS labels
+       never contain '+' or '-', so the first one starts the offset. */
+    long offset = 0;
+    char *op = inner;
+    while (*op && *op != '+' && *op != '-') op++;
+    if (*op) {
+        char sign = *op;
+        *op = 0;
+        unsigned long mag;
+        if (!parse_offset(op + 1, &mag)) {
+            snprintf(errbuf, err_len, "bad offset in '%s'", token);
+            return false;
+        }
+        offset = sign == '-' ? -(long)mag : (long)mag;
+    }
+
+    uint16_t base_addr;
+    if (!symbols_lookup(syms, inner, &base_addr)) {
+        snprintf(errbuf, err_len, "unknown symbol '%s'", inner);
+        return false;
+    }
+
+    long result = (long)base_addr + offset;
+    if (result < 0 || result > 0xFFFF) {
+        snprintf(errbuf, err_len, "symbol '%s%+ld' resolves out of range", inner, offset);
+        return false;
+    }
+
+    snprintf(out, out_len, "$%04X", (unsigned)result);
+    return true;
 }

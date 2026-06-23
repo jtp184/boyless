@@ -55,11 +55,54 @@ static void test_malformed_line_fails(void)
     assert(load_str("00:c000 wValue\nnonsense_without_colon_or_label\n") == NULL);
 }
 
+/* Convenience wrapper: returns true on success, fills `out`. */
+static bool expand(const symbols_t *s, const char *tok, char *out, bool *was_ref)
+{
+    char err[128];
+    return symbols_expand_token(s, tok, out, 8, err, sizeof(err), was_ref);
+}
+
+static void test_expand(void)
+{
+    symbols_t *s = load_str("00:c000 wValue\n00:fffe wTop\n");
+    assert(s);
+    char out[8];
+    bool ref;
+
+    /* plain token passes through, not a reference */
+    assert(expand(s, "memory", out, &ref) && !ref);
+
+    /* bare symbol */
+    assert(expand(s, "{wValue}", out, &ref) && ref && strcmp(out, "$C000") == 0);
+
+    /* decimal offset */
+    assert(expand(s, "{wValue+4}", out, &ref) && ref && strcmp(out, "$C004") == 0);
+    assert(expand(s, "{wValue-1}", out, &ref) && ref && strcmp(out, "$BFFF") == 0);
+
+    /* hex offset */
+    assert(expand(s, "{wValue+$10}", out, &ref) && ref && strcmp(out, "$C010") == 0);
+
+    /* failures */
+    assert(!expand(s, "{nope}", out, &ref) && ref);          /* unknown symbol */
+    assert(!expand(s, "{wTop+2}", out, &ref) && ref);        /* overflow past $FFFF */
+    assert(!expand(s, "{wValue-49153}", out, &ref) && ref);  /* underflow below 0 */
+    assert(!expand(s, "{wValue", out, &ref) && ref);         /* missing close brace */
+    assert(!expand(s, "wValue}", out, &ref) && !ref);        /* stray close brace, not a ref */
+    assert(!expand(s, "{wValue+}", out, &ref) && ref);       /* empty offset */
+    assert(!expand(s, "{wValue+x}", out, &ref) && ref);      /* bad offset digit */
+
+    /* a reference with no symbol table is an error */
+    assert(!expand(NULL, "{wValue}", out, &ref) && ref);
+
+    symbols_free(s);
+}
+
 int main(void)
 {
     test_load_and_lookup();
     test_first_wins();
     test_malformed_line_fails();
+    test_expand();
     printf("test_symbols: OK\n");
     return 0;
 }
