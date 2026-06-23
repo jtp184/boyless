@@ -102,6 +102,23 @@ static int write_numbered(GB_gameboy_t *gb, const char *dir, unsigned id,
     return screenshot_write(path, cfg->framebuffer, w, h);
 }
 
+/* Read <dir>/screenshot_NNN.<ext> into a shared scratch buffer. On success
+   returns the pixel buffer and fills *w,*h; on failure returns NULL. `path_out`
+   always receives the constructed path so the caller can name it in diagnostics.
+   The buffer is static scratch, valid until the next read_numbered call — fine
+   because commands run one at a time. */
+static const uint32_t *read_numbered(const char *dir, unsigned id,
+                                     unsigned *w, unsigned *h,
+                                     char *path_out, size_t path_sz)
+{
+    snprintf(path_out, path_sz, "%s/screenshot_%03u.%s",
+             dir, id, screenshot_extension());
+    static uint32_t buf[256 * 224];
+    *w = 0; *h = 0;
+    if (screenshot_read(path_out, buf, 256 * 224, w, h) != 0) return NULL;
+    return buf;
+}
+
 /* Returns true if the comparison failed. */
 static bool do_compare(GB_gameboy_t *gb, const command_t *cmd,
                        const runner_config_t *cfg, runner_result_t *result)
@@ -122,12 +139,10 @@ static bool do_compare(GB_gameboy_t *gb, const command_t *cmd,
     unsigned h = GB_get_screen_height(gb);
 
     char ref_path[1200];
-    snprintf(ref_path, sizeof(ref_path), "%s/screenshot_%03u.%s",
-             cfg->reference_dir, cmd->number, screenshot_extension());
-
-    static uint32_t ref[256 * 224];
-    unsigned rw = 0, rh = 0;
-    if (screenshot_read(ref_path, ref, 256 * 224, &rw, &rh) != 0) {
+    unsigned rw, rh;
+    const uint32_t *ref = read_numbered(cfg->reference_dir, cmd->number,
+                                        &rw, &rh, ref_path, sizeof(ref_path));
+    if (!ref) {
         fprintf(stderr, "compare (line %u): cannot read reference '%s'\n",
                 cmd->line, ref_path);
         result->failures++;
@@ -161,12 +176,10 @@ static bool do_differ(GB_gameboy_t *gb, const command_t *cmd,
     unsigned h = GB_get_screen_height(gb);
 
     char base_path[1200];
-    snprintf(base_path, sizeof(base_path), "%s/screenshot_%03u.%s",
-             cfg->screenshot_dir, cmd->number, screenshot_extension());
-
-    static uint32_t base[256 * 224];
-    unsigned bw = 0, bh = 0;
-    if (screenshot_read(base_path, base, 256 * 224, &bw, &bh) != 0) {
+    unsigned bw, bh;
+    const uint32_t *base = read_numbered(cfg->screenshot_dir, cmd->number,
+                                         &bw, &bh, base_path, sizeof(base_path));
+    if (!base) {
         fprintf(stderr, "differ (line %u): cannot read baseline '%s'\n",
                 cmd->line, base_path);
         result->failures++;
