@@ -103,6 +103,8 @@ int screenshot_write(const char *path, const uint32_t *pixels,
 int screenshot_read(const char *path, uint32_t *pixels, size_t max_pixels,
                     unsigned *width, unsigned *height)
 {
+    if (!path || !pixels || !width || !height) return -1;
+
     FILE *f = fopen(path, "rb");
     if (!f) return -1;
 
@@ -130,7 +132,9 @@ int screenshot_read(const char *path, uint32_t *pixels, size_t max_pixels,
     }
 
     if (w == 0 || h == 0) goto done;
-    if ((size_t)w * h > max_pixels) goto done;
+    /* w != 0 here, so the division can't trap; this avoids the overflow a
+       direct `w * h > max_pixels` would risk when size_t is 32-bit. */
+    if ((size_t)h > max_pixels / w) goto done;
 
     if (fseek(f, header_size, SEEK_SET) != 0) goto done;
     size_t n = (size_t)w * h;

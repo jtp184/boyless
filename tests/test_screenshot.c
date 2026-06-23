@@ -86,11 +86,48 @@ static void test_tga_roundtrip(void)
     remove(path);
 }
 
+static void test_read_rejects_null_args(void)
+{
+    screenshot_set_format(false); /* BMP */
+    uint32_t out[4];
+    unsigned w = 0, h = 0;
+    /* Each NULL argument yields a clean -1, never a crash. */
+    assert(screenshot_read(NULL, out, 4, &w, &h) == -1);
+    assert(screenshot_read("build/test_rt.bmp", NULL, 4, &w, &h) == -1);
+    assert(screenshot_read("build/test_rt.bmp", out, 4, NULL, &h) == -1);
+    assert(screenshot_read("build/test_rt.bmp", out, 4, &w, NULL) == -1);
+}
+
+static void test_read_rejects_oversized_dimensions(void)
+{
+    screenshot_set_format(false); /* BMP */
+    uint32_t px[4] = {1, 2, 3, 4};
+    const char *path = "build/test_huge.bmp";
+    assert(screenshot_write(path, px, 2, 2) == 0);
+
+    /* Corrupt the BMP width field (offset 0x12) to a value whose product with
+       the height would overflow a 32-bit size_t. The bound check must still
+       reject it (no overflow, no crash). */
+    FILE *f = fopen(path, "r+b");
+    assert(f);
+    uint8_t huge[4] = {0xFF, 0xFF, 0xFF, 0xFF};
+    assert(fseek(f, 0x12, SEEK_SET) == 0);
+    assert(fwrite(huge, 1, 4, f) == 4);
+    fclose(f);
+
+    uint32_t out[4];
+    unsigned w = 0, h = 0;
+    assert(screenshot_read(path, out, 4, &w, &h) == -1);
+    remove(path);
+}
+
 int main(void)
 {
     test_bmp_roundtrip();
     test_read_buffer_too_small();
     test_tga_roundtrip();
+    test_read_rejects_null_args();
+    test_read_rejects_oversized_dimensions();
     test_bmp_header_and_size();
     test_tga_writes();
     printf("test_screenshot: OK\n");
