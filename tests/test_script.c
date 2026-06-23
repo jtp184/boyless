@@ -1,15 +1,66 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include "script.h"
+#include "symbols.h"
 
 static bool parse_str(const char *text, script_t *out)
 {
     FILE *f = fmemopen((void *)text, strlen(text), "r");
     assert(f);
-    bool ok = script_parse_stream(f, "<test>", out);
+    bool ok = script_parse_stream(f, "<test>", NULL, out);
     fclose(f);
     return ok;
+}
+
+static bool parse_str_syms(const char *text, const symbols_t *syms, script_t *out)
+{
+    FILE *f = fmemopen((void *)text, strlen(text), "r");
+    assert(f);
+    bool ok = script_parse_stream(f, "<test>", syms, out);
+    fclose(f);
+    return ok;
+}
+
+/* Write `text` to a temp file and load it as a symbol table. */
+static symbols_t *load_str(const char *text)
+{
+    char path[] = "/tmp/boyless_script_sym_XXXXXX";
+    int fd = mkstemp(path);
+    assert(fd >= 0);
+    FILE *f = fdopen(fd, "w");
+    assert(f);
+    fputs(text, f);
+    fclose(f);
+    symbols_t *s = NULL;
+    bool ok = symbols_load(path, &s);
+    remove(path);
+    assert(ok);
+    return s;
+}
+
+static void test_symbol_expansion(void)
+{
+    symbols_t *syms = load_str("00:c000 wValue\n");
+    script_t s = {0};
+
+    assert(parse_str_syms("memory {wValue} $42\n", syms, &s));
+    assert(s.count == 1);
+    assert(s.commands[0].type == CMD_MEMORY);
+    assert(s.commands[0].addr == 0xC000);
+    assert(s.commands[0].has_value && s.commands[0].value == 0x42);
+    script_free(&s);
+
+    assert(parse_str_syms("memory {wValue+4}\n", syms, &s));
+    assert(s.commands[0].addr == 0xC004);
+    script_free(&s);
+
+    /* unknown symbol and missing --sym are parse errors */
+    assert(!parse_str_syms("memory {nope}\n", syms, &s));
+    assert(!parse_str("memory {wValue}\n", &s));   /* NULL table */
+
+    symbols_free(syms);
 }
 
 static void test_valid_script(void)
@@ -75,6 +126,7 @@ int main(void)
 {
     test_valid_script();
     test_rejections();
+    test_symbol_expansion();
     printf("test_script: OK\n");
     return 0;
 }

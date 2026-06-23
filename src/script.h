@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <Core/gb.h>
+#include "symbols.h"
 
 typedef enum {
     CMD_WAIT,        /* count = frames to advance */
@@ -36,12 +37,13 @@ typedef struct {
 } script_t;
 
 /* Parse a script from an open stream. `label` is used in error messages.
-   On success fills `out` and returns true. On failure logs to stderr and
-   returns false (out is left zeroed). */
-bool script_parse_stream(FILE *stream, const char *label, script_t *out);
+   `syms` (may be NULL) resolves {symbol} token references. On success fills
+   `out` and returns true. On failure logs to stderr and returns false. */
+bool script_parse_stream(FILE *stream, const char *label,
+                         const symbols_t *syms, script_t *out);
 
 /* Open `path` and parse it. If `path` is NULL or "-", reads from stdin. */
-bool script_parse_path(const char *path, script_t *out);
+bool script_parse_path(const char *path, const symbols_t *syms, script_t *out);
 
 void script_free(script_t *script);
 

@@ -80,7 +80,7 @@ build/test_screenshot: tests/test_screenshot.c src/screenshot.c | $(SB_STAMP)
 	@mkdir -p build
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
-build/test_script: tests/test_script.c src/script.c | $(SB_STAMP)
+build/test_script: tests/test_script.c src/script.c src/symbols.c | $(SB_STAMP)
 	@mkdir -p build
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
