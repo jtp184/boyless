@@ -90,6 +90,7 @@ int main(int argc, char **argv)
         else if (strcmp(a, "--tga") == 0) { use_tga = true; }
         else if (strcmp(a, "--update") == 0) { update_mode = true; }
         else if (strcmp(a, "--fail-fast") == 0) { fail_fast = true; }
+        else if (strcmp(a, "--report-only") == 0) { report_only = true; }
         /* Consume the next argv as this flag's value, or fail with a clear
            "needs a value" message rather than a misleading "unknown option". */
 #define REQUIRE_VALUE(dest) do { \

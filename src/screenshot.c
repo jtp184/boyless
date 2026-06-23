@@ -125,9 +125,11 @@ int screenshot_read(const char *path, uint32_t *pixels, size_t max_pixels,
         if (hdr[0] != 0x42 || hdr[1] != 0x4D) goto done; /* 'BM' */
         w = (unsigned)hdr[0x12] | ((unsigned)hdr[0x13] << 8)
           | ((unsigned)hdr[0x14] << 16) | ((unsigned)hdr[0x15] << 24);
-        int32_t sh = (int32_t)((uint32_t)hdr[0x16] | ((uint32_t)hdr[0x17] << 8)
-          | ((uint32_t)hdr[0x18] << 16) | ((uint32_t)hdr[0x19] << 24));
-        h = (unsigned)(sh < 0 ? -sh : sh);
+        /* BMP height is signed (negative = top-down). Take the magnitude in the
+           unsigned domain so an on-disk INT32_MIN can't trigger negation UB. */
+        uint32_t raw_h = (uint32_t)hdr[0x16] | ((uint32_t)hdr[0x17] << 8)
+          | ((uint32_t)hdr[0x18] << 16) | ((uint32_t)hdr[0x19] << 24);
+        h = (raw_h & 0x80000000u) ? (unsigned)(0u - raw_h) : (unsigned)raw_h;
         header_size = (long)sizeof(hdr);
     }
 

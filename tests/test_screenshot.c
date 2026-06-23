@@ -121,6 +121,28 @@ static void test_read_rejects_oversized_dimensions(void)
     remove(path);
 }
 
+static void test_read_rejects_intmin_height(void)
+{
+    screenshot_set_format(false); /* BMP */
+    uint32_t px[4] = {1, 2, 3, 4};
+    const char *path = "build/test_intmin.bmp";
+    assert(screenshot_write(path, px, 2, 2) == 0);
+
+    /* BMP height (offset 0x16) is signed; INT32_MIN (0x80000000) negated would
+       be UB. Patch it in and confirm screenshot_read rejects cleanly. */
+    FILE *f = fopen(path, "r+b");
+    assert(f);
+    uint8_t intmin[4] = {0x00, 0x00, 0x00, 0x80};
+    assert(fseek(f, 0x16, SEEK_SET) == 0);
+    assert(fwrite(intmin, 1, 4, f) == 4);
+    fclose(f);
+
+    uint32_t out[4];
+    unsigned w = 0, h = 0;
+    assert(screenshot_read(path, out, 4, &w, &h) == -1);
+    remove(path);
+}
+
 int main(void)
 {
     test_bmp_roundtrip();
@@ -128,6 +150,7 @@ int main(void)
     test_tga_roundtrip();
     test_read_rejects_null_args();
     test_read_rejects_oversized_dimensions();
+    test_read_rejects_intmin_height();
     test_bmp_header_and_size();
     test_tga_writes();
     printf("test_screenshot: OK\n");

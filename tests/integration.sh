@@ -131,4 +131,16 @@ grep -q "needs a value" "$WORK/arg_stderr.txt" \
     || { echo "FAIL: missing flag value did not report 'needs a value'"; exit 1; }
 echo "PASS: missing flag value reports a clear error"
 
+# 9. --report-only: a failing assertion is still reported but the run exits 0.
+_ro_rc=0
+printf 'wait 10\nmemory C000 99\n' \
+    | "$BOYLESS" --model dmg --rom "$ROMS/mem.gb" --hang-timeout 0 --report-only - \
+    2>"$WORK/ro_stderr.txt" || _ro_rc=$?
+if [ "$_ro_rc" -ne 0 ]; then
+    echo "FAIL: --report-only did not exit 0 on a failed assertion"; exit 1
+fi
+grep -q "expected" "$WORK/ro_stderr.txt" \
+    || { echo "FAIL: --report-only suppressed the failure message"; exit 1; }
+echo "PASS: --report-only reports failures but exits 0"
+
 echo "integration: OK"
