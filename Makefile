@@ -9,7 +9,7 @@ SB_BOOT  := $(SAMEBOY)/build/bin/BootROMs
 CFLAGS   := -std=gnu11 -Wall -Wextra -I$(SAMEBOY) -Isrc
 LDFLAGS  := -lm
 
-SRC      := src/screenshot.c src/script.c src/runner.c src/main.c
+SRC      := src/screenshot.c src/script.c src/runner.c src/symbols.c src/main.c
 OBJ      := $(patsubst src/%.c,build/obj/%.o,$(SRC))
 
 BOOTROMS := dmg_boot.bin cgb_boot.bin sgb2_boot.bin
@@ -70,10 +70,11 @@ build/bin/%.bin: $(SB_BOOT)/%.bin
 clean:
 	rm -rf build
 
-test: build/test_screenshot build/test_script build/test_runner
+test: build/test_screenshot build/test_script build/test_runner build/test_symbols
 	./build/test_screenshot
 	./build/test_script
 	./build/test_runner
+	./build/test_symbols
 
 build/test_screenshot: tests/test_screenshot.c src/screenshot.c | $(SB_STAMP)
 	@mkdir -p build
@@ -86,3 +87,7 @@ build/test_script: tests/test_script.c src/script.c | $(SB_STAMP)
 build/test_runner: tests/test_runner.c src/runner.c src/screenshot.c | $(SB_STAMP)
 	@mkdir -p build
 	$(CC) $(CFLAGS) $^ $(SB_LIB) -o $@ $(LDFLAGS)
+
+build/test_symbols: tests/test_symbols.c src/symbols.c | $(SB_STAMP)
+	@mkdir -p build
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
