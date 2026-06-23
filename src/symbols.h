@@ -14,8 +14,9 @@ typedef struct symbols symbols_t;
 
 /* Parse an RGBDS .sym file ("BB:AAAA Label" lines; ';' comments; blanks).
    Only the 16-bit address and label are kept; bank is dropped. On success sets
-   *out to a newly allocated table and returns true. On failure logs to stderr
-   and returns false (*out untouched). Free with symbols_free. */
+   *out to a newly allocated table and returns true. Returns false on failure
+   with *out untouched; I/O and format errors are logged to stderr, while NULL
+   args and allocation failure return false silently. Free with symbols_free. */
 bool symbols_load(const char *path, symbols_t **out);
 
 /* Look up `name` case-sensitively. On hit writes the address and returns true.

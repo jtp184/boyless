@@ -19,7 +19,7 @@ BOOT_OUT := $(patsubst %,build/bin/%,$(BOOTROMS))
 all: build/bin/boyless $(BOOT_OUT)
 
 # Assembly test ROMs (RGBDS).
-testroms: build/testroms/fill.gb build/testroms/input.gb build/testroms/mem.gb build/testroms/blank.gb
+testroms: build/testroms/fill.gb build/testroms/input.gb build/testroms/mem.gb build/testroms/mem.sym build/testroms/blank.gb
 
 build/testroms/fill.gb: testroms/fill.asm
 	@mkdir -p $(dir $@)
@@ -33,11 +33,14 @@ build/testroms/input.gb: testroms/input.asm
 	$(RGBLINK) -o $@ build/testroms/input.o
 	$(RGBFIX) -v -C -p 0xFF $@
 
-build/testroms/mem.gb: testroms/mem.asm
-	@mkdir -p $(dir $@)
+# mem.gb and mem.sym are produced by one rgblink invocation. A grouped target
+# (&:) tells Make both come from a single recipe run, so deleting either one
+# (e.g. a stale mem.sym while mem.gb is current) triggers a correct rebuild.
+build/testroms/mem.gb build/testroms/mem.sym &: testroms/mem.asm
+	@mkdir -p build/testroms
 	$(RGBASM) -o build/testroms/mem.o $<
-	$(RGBLINK) -n build/testroms/mem.sym -o $@ build/testroms/mem.o
-	$(RGBFIX) -v -p 0xFF $@
+	$(RGBLINK) -n build/testroms/mem.sym -o build/testroms/mem.gb build/testroms/mem.o
+	$(RGBFIX) -v -p 0xFF build/testroms/mem.gb
 
 build/testroms/blank.gb: testroms/blank.asm
 	@mkdir -p $(dir $@)
