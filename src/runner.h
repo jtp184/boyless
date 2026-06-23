@@ -28,12 +28,15 @@ typedef enum {
 } settle_status_t;
 
 typedef struct {
-    hang_tracker_t inner;  /* counts consecutive identical frames */
-    unsigned       waited; /* total frames advanced this settle */
+    uint64_t last_hash; /* hash of the current stable run */
+    unsigned stable;    /* length of that run, counted inclusively */
+    unsigned waited;    /* total frames advanced this settle */
+    bool     primed;    /* a frame has been seen */
 } settle_tracker_t;
 
 void settle_tracker_init(settle_tracker_t *t);
-/* Feed one frame's hash. `target` = frames of stability required (>= 1);
+/* Feed one frame's hash. `target` = consecutive identical frames required,
+   counted inclusively so `target` N stabilizes on the Nth such frame (>= 1);
    `ceiling` = max frames to wait (0 disables the timeout). */
 settle_status_t settle_tracker_update(settle_tracker_t *t, uint64_t hash,
                                       unsigned target, unsigned ceiling);

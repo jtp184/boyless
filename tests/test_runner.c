@@ -38,12 +38,21 @@ static void test_settle_stabilizes(void)
 {
     settle_tracker_t t;
     settle_tracker_init(&t);
-    assert(settle_tracker_update(&t, 1, 3, 100) == SETTLE_CONTINUE); /* prime */
-    assert(settle_tracker_update(&t, 2, 3, 100) == SETTLE_CONTINUE); /* changed */
-    assert(settle_tracker_update(&t, 9, 3, 100) == SETTLE_CONTINUE); /* changed */
-    assert(settle_tracker_update(&t, 9, 3, 100) == SETTLE_CONTINUE); /* stale=1 */
-    assert(settle_tracker_update(&t, 9, 3, 100) == SETTLE_CONTINUE); /* stale=2 */
-    assert(settle_tracker_update(&t, 9, 3, 100) == SETTLE_STABLE);   /* stale=3 */
+    /* target 3 = three consecutive identical frames, counted inclusively. */
+    assert(settle_tracker_update(&t, 1, 3, 100) == SETTLE_CONTINUE); /* run = 1 (hash 1) */
+    assert(settle_tracker_update(&t, 2, 3, 100) == SETTLE_CONTINUE); /* changed, run = 1 */
+    assert(settle_tracker_update(&t, 9, 3, 100) == SETTLE_CONTINUE); /* changed, run = 1 */
+    assert(settle_tracker_update(&t, 9, 3, 100) == SETTLE_CONTINUE); /* run = 2 */
+    assert(settle_tracker_update(&t, 9, 3, 100) == SETTLE_STABLE);   /* run = 3 */
+}
+
+static void test_settle_one_frame(void)
+{
+    settle_tracker_t t;
+    settle_tracker_init(&t);
+    /* settle 1 stabilizes on the very first frame: a single frame is,
+       inclusively, "unchanged for 1 frame". */
+    assert(settle_tracker_update(&t, 42, 1, 100) == SETTLE_STABLE);
 }
 
 static void test_settle_times_out(void)
@@ -69,6 +78,7 @@ static void test_settle_no_ceiling(void)
 int main(void)
 {
     test_settle_stabilizes();
+    test_settle_one_frame();
     test_settle_times_out();
     test_settle_no_ceiling();
     test_hash_changes_with_content();

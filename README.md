@@ -46,7 +46,7 @@ One command per line; `#` starts a comment.
 | Command | Effect |
 |---------|--------|
 | `wait <frames>` | advance N rendered frames |
-| `settle <frames>` | advance until the screen is unchanged for N frames; fails if it can't stabilize within the hang-timeout |
+| `settle <frames>` | advance until the screen is unchanged for N consecutive frames; fails if it can't stabilize within the hang-timeout |
 | `press <key> [frames]` | hold key for N frames (default 2), then release |
 | `down <key>` | press and hold a key |
 | `up <key>` | release a key |
@@ -74,6 +74,12 @@ failures without affecting the exit code.
 To create golden references, run the script once with `--update` (which makes
 `compare` write `screenshot_NNN` into the reference dir instead of asserting),
 then run it again without `--update` to check against them.
+
+`settle` uses the hang-timeout as its stabilization ceiling: it fails (a
+timeout) if the screen hasn't held steady for N frames within that window.
+**`--hang-timeout 0` disables that ceiling**, so a `settle` on a screen that
+never stabilizes will run forever — only disable the hang-timeout when your
+script doesn't rely on `settle` to bound itself.
 
 ### Boot timing
 

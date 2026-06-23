@@ -112,4 +112,12 @@ test -s "$CNT/screenshot_006.bmp" || { echo "FAIL: auto id did not advance to 6 
 test ! -e "$CNT/screenshot_003.bmp" || { echo "FAIL: auto id rewound to 3"; exit 1; }
 echo "PASS: shared id counter advances forward only"
 
+# 7. settle: fill.gb is static after boot, so `settle` must stabilize and let
+# the script proceed to write a screenshot (exit 0, no failures).
+STL="$WORK/settle"; mkdir -p "$STL"
+printf 'wait 200\nsettle 10\nscreenshot\n' \
+    | "$BOYLESS" --model dmg --rom "$ROMS/fill.gb" --screenshot-dir "$STL" -
+test -s "$STL/screenshot_000.bmp" || { echo "FAIL: settle did not reach the screenshot"; exit 1; }
+echo "PASS: settle stabilizes on a static screen"
+
 echo "integration: OK"

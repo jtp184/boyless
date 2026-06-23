@@ -46,15 +46,26 @@ bool hang_tracker_update(hang_tracker_t *t, uint64_t hash, unsigned limit)
 
 void settle_tracker_init(settle_tracker_t *t)
 {
-    hang_tracker_init(&t->inner);
+    t->last_hash = 0;
+    t->stable = 0;
     t->waited = 0;
+    t->primed = false;
 }
 
 settle_status_t settle_tracker_update(settle_tracker_t *t, uint64_t hash,
                                       unsigned target, unsigned ceiling)
 {
     t->waited++;
-    if (hang_tracker_update(&t->inner, hash, target)) return SETTLE_STABLE;
+    if (!t->primed || hash != t->last_hash) {
+        /* First frame, or a change: this frame starts a fresh stable run. */
+        t->primed = true;
+        t->last_hash = hash;
+        t->stable = 1;
+    }
+    else {
+        t->stable++;
+    }
+    if (t->stable >= target) return SETTLE_STABLE;
     if (ceiling != 0 && t->waited >= ceiling) return SETTLE_TIMEOUT;
     return SETTLE_CONTINUE;
 }
