@@ -18,6 +18,15 @@ uint64_t framebuffer_hash(const uint32_t *pixels, size_t pixel_count)
     return h;
 }
 
+bool framebuffer_is_blank(const uint32_t *pixels, size_t pixel_count)
+{
+    if (pixel_count == 0) return true;
+    uint32_t first = pixels[0];
+    for (size_t i = 1; i < pixel_count; i++)
+        if (pixels[i] != first) return false;
+    return true;
+}
+
 void hang_tracker_init(hang_tracker_t *t)
 {
     t->last_hash = 0;
@@ -191,6 +200,22 @@ static bool do_memory(GB_gameboy_t *gb, const command_t *cmd, runner_result_t *r
     return false;
 }
 
+/* Returns true if the assertion failed (screen is blank). */
+static bool do_noblank(GB_gameboy_t *gb, const command_t *cmd,
+                       const runner_config_t *cfg, runner_result_t *result)
+{
+    unsigned w = GB_get_screen_width(gb);
+    unsigned h = GB_get_screen_height(gb);
+    size_t n = (size_t)w * h;
+    if (framebuffer_is_blank(cfg->framebuffer, n)) {
+        fprintf(stderr, "noblank (line %u): screen is blank (all %zu pixels identical)\n",
+                cmd->line, n);
+        result->failures++;
+        return true;
+    }
+    return false;
+}
+
 /* Returns true if the screen failed to stabilize. */
 static bool do_settle(GB_gameboy_t *gb, const command_t *cmd,
                       const runner_config_t *cfg, runner_result_t *result)
@@ -285,6 +310,9 @@ void runner_run(GB_gameboy_t *gb, const script_t *script,
             }
             case CMD_MEMORY:
                 if (do_memory(gb, cmd, result) && cfg->fail_fast) stop = true;
+                break;
+            case CMD_NOBLANK:
+                if (do_noblank(gb, cmd, cfg, result) && cfg->fail_fast) stop = true;
                 break;
         }
     }

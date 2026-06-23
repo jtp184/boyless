@@ -125,11 +125,21 @@ static void test_rejections(void)
     assert(!parse_str("frobnicate\n", &s));   /* unknown command */
 }
 
+static void test_noblank(void)
+{
+    script_t s = {0};
+    assert(parse_str("noblank\n", &s));
+    assert(s.count == 1 && s.commands[0].type == CMD_NOBLANK);
+    script_free(&s);
+    assert(!parse_str("noblank 5\n", &s));   /* takes no arguments */
+}
+
 int main(void)
 {
     test_valid_script();
     test_rejections();
     test_symbol_expansion();
+    test_noblank();
     printf("test_script: OK\n");
     return 0;
 }

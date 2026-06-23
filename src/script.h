@@ -18,6 +18,7 @@ typedef enum {
     CMD_COMPARE,     /* number = reference id to assert against */
     CMD_DIFFER,      /* number = baseline id to assert difference from */
     CMD_MEMORY,      /* addr; value/has_value = assert, else print */
+    CMD_NOBLANK,     /* assert the live screen is not a single flat colour */
 } cmd_type_t;
 
 typedef struct {

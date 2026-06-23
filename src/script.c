@@ -202,6 +202,13 @@ bool script_parse_stream(FILE *f, const char *label, const symbols_t *syms, scri
             cmd->has_number = true;
             cmd->type = CMD_DIFFER;
         }
+        else if (strcasecmp(verb, "noblank") == 0) {
+            if (ntokens != 1) {
+                fprintf(stderr, "%s:%u: 'noblank' takes no arguments\n", label, line_no);
+                error = true; break;
+            }
+            cmd->type = CMD_NOBLANK;
+        }
         else if (strcasecmp(verb, "memory") == 0) {
             if (ntokens < 2 || ntokens > 3 || !parse_hex16(tokens[1], &cmd->addr)) {
                 fprintf(stderr, "%s:%u: 'memory' needs a 16-bit hex address and optional value\n", label, line_no);

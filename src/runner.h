@@ -9,6 +9,9 @@
 
 /* Pure helpers (unit-testable without an emulator). */
 uint64_t framebuffer_hash(const uint32_t *pixels, size_t pixel_count);
+/* True if every pixel equals the first (a single-colour / blank screen).
+   A zero-length buffer is treated as blank. */
+bool framebuffer_is_blank(const uint32_t *pixels, size_t pixel_count);
 
 typedef struct {
     uint64_t last_hash;

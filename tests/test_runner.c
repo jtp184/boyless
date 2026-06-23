@@ -75,6 +75,15 @@ static void test_settle_no_ceiling(void)
     }
 }
 
+static void test_framebuffer_is_blank(void)
+{
+    uint32_t uniform[4] = {7, 7, 7, 7};
+    uint32_t varied[4]  = {7, 7, 7, 8};
+    assert(framebuffer_is_blank(uniform, 4));   /* all identical => blank */
+    assert(!framebuffer_is_blank(varied, 4));   /* one differs => not blank */
+    assert(framebuffer_is_blank(uniform, 0));   /* empty => blank */
+}
+
 int main(void)
 {
     test_settle_stabilizes();
@@ -84,6 +93,7 @@ int main(void)
     test_hash_changes_with_content();
     test_hang_tracker();
     test_hang_tracker_disabled();
+    test_framebuffer_is_blank();
     printf("test_runner: OK\n");
     return 0;
 }
