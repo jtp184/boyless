@@ -142,6 +142,11 @@ bool symbols_expand_token(const symbols_t *syms, const char *token,
     if (!was_ref) return false;   /* required out-param; cannot report otherwise */
     *was_ref = false;
     if (!out || !errbuf) return false;   /* required buffers; needed to report/emit */
+    if (out_len < 8) {                   /* documented minimum; below it "$FFFF"
+                                            would truncate to a wrong token */
+        snprintf(errbuf, err_len, "output buffer too small (need >= 8)");
+        return false;
+    }
     if (!token) {
         snprintf(errbuf, err_len, "null token");
         return false;

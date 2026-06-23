@@ -109,6 +109,10 @@ static void test_expand(void)
     assert(!symbols_expand_token(s, "{wValue}", NULL, 0, err, sizeof(err), &ref));
     assert(!symbols_expand_token(s, "{wValue}", out, sizeof(out), NULL, 0, &ref));
 
+    /* an undersized out buffer is rejected, not silently truncated to "$C0" */
+    char tiny[4];
+    assert(!symbols_expand_token(s, "{wValue}", tiny, sizeof(tiny), err, sizeof(err), &ref));
+
     symbols_free(s);
 }
 
