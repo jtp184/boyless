@@ -4,3 +4,6 @@
 boyless
 *.bmp
 *.tga
+
+# superpowers brainstorming/planning artifacts (kept local, not tracked)
+/docs/superpowers/
