@@ -32,8 +32,12 @@ Options:
 | `--boot <path>` | boot ROM (defaults per model) |
 | `--model <dmg\|cgb\|sgb>` | emulated model (default cgb) |
 | `--tga` | write TGA screenshots instead of BMP |
+| `--screenshot-dir <dir>` | directory for screenshots and `.actual` dumps (default `.`) |
+| `--reference-dir <dir>` | directory `compare` reads references from / writes under `--update` (default `.`) |
+| `--update` | make `compare` write references instead of asserting |
+| `--fail-fast` | stop at the first failed assertion (default: run to completion) |
+| `--report-only` | print failures but always exit 0 |
 | `--hang-timeout <sec>` | seconds of frozen video before flagging (default 5, 0 disables) |
-| `--fail-on-hang` | exit non-zero if a hang is detected |
 
 ## Script format
 
@@ -42,15 +46,34 @@ One command per line; `#` starts a comment.
 | Command | Effect |
 |---------|--------|
 | `wait <frames>` | advance N rendered frames |
+| `settle <frames>` | advance until the screen is unchanged for N frames; fails if it can't stabilize within the hang-timeout |
 | `press <key> [frames]` | hold key for N frames (default 2), then release |
 | `down <key>` | press and hold a key |
 | `up <key>` | release a key |
-| `screenshot [name]` | capture; auto-named `<script>_NNN.bmp` if no name |
+| `screenshot [number]` | write `screenshot_NNN.<ext>`; auto-numbered unless an id is given |
+| `compare <number>` | compare the live screen exactly to reference `screenshot_NNN.<ext>`; mismatch is a failure |
+| `memory <addr> [value]` | read the byte at 16-bit hex `addr`; with `value` assert equality, without it print the byte |
 
 Keys: `a b start select up down left right`.
 
-Screenshots are written to the current directory; auto-named shots use the
-script's basename and a zero-padded counter.
+Screenshots and references are named `screenshot_NNN.<ext>` (`<ext>` is `bmp`,
+or `tga` with `--tga`), where `NNN` is a zero-padded counter shared by
+`screenshot` and `compare`. Pass a number to pin a specific id.
+
+Memory addresses are 16-bit hex (a leading `$` is optional). A `memory` value
+is decimal by default, or hex with a `$` prefix; both forms are a single byte.
+
+### Assertions and exit codes
+
+`compare`, `memory`, a `settle` that never stabilizes, and a detected hang are
+all **failures**. boyless runs the whole script, reports every failure, and
+exits non-zero if any occurred — so it works directly as a test in CI. Use
+`--fail-fast` to stop at the first failure, or `--report-only` to inspect
+failures without affecting the exit code.
+
+To create golden references, run the script once with `--update` (which makes
+`compare` write `screenshot_NNN` into the reference dir instead of asserting),
+then run it again without `--update` to check against them.
 
 ### Boot timing
 
@@ -67,8 +90,8 @@ should `wait` at least ~300 frames before the first `screenshot`, as
 
 `make test` needs no ROM. `make integration` assembles the test ROMs in
 `testroms/` (requires RGBDS) and runs `boyless` against them to prove the DMG
-path + hang detection (`fill.asm`) and per-button input dispatch on CGB
-(`input.asm`).
+path + hang detection (`fill.asm`), per-button input dispatch on CGB
+(`input.asm`), and the `compare` and `memory` assertion paths (`mem.asm`).
 
 ## Continuous integration
 
