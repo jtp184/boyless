@@ -90,15 +90,25 @@ int main(int argc, char **argv)
         else if (strcmp(a, "--tga") == 0) { use_tga = true; }
         else if (strcmp(a, "--update") == 0) { update_mode = true; }
         else if (strcmp(a, "--fail-fast") == 0) { fail_fast = true; }
-        else if (strcmp(a, "--report-only") == 0) { report_only = true; }
-        else if (strcmp(a, "--screenshot-dir") == 0 && i + 1 < argc) { screenshot_dir = argv[++i]; }
-        else if (strcmp(a, "--reference-dir") == 0 && i + 1 < argc) { reference_dir = argv[++i]; }
-        else if (strcmp(a, "--rom") == 0 && i + 1 < argc) { rom_path = argv[++i]; }
-        else if (strcmp(a, "--script") == 0 && i + 1 < argc) { script_path = argv[++i]; }
-        else if (strcmp(a, "--boot") == 0 && i + 1 < argc) { boot_path = argv[++i]; }
-        else if (strcmp(a, "--model") == 0 && i + 1 < argc) { model_name = argv[++i]; }
-        else if (strcmp(a, "--hang-timeout") == 0 && i + 1 < argc) {
-            const char *val = argv[++i];
+        /* Consume the next argv as this flag's value, or fail with a clear
+           "needs a value" message rather than a misleading "unknown option". */
+#define REQUIRE_VALUE(dest) do { \
+            if (i + 1 >= argc) { \
+                fprintf(stderr, "Option %s needs a value\n", a); \
+                usage(argv[0]); \
+                return 1; \
+            } \
+            (dest) = argv[++i]; \
+        } while (0)
+        else if (strcmp(a, "--screenshot-dir") == 0) { REQUIRE_VALUE(screenshot_dir); }
+        else if (strcmp(a, "--reference-dir") == 0)  { REQUIRE_VALUE(reference_dir); }
+        else if (strcmp(a, "--rom") == 0)            { REQUIRE_VALUE(rom_path); }
+        else if (strcmp(a, "--script") == 0)         { REQUIRE_VALUE(script_path); }
+        else if (strcmp(a, "--boot") == 0)           { REQUIRE_VALUE(boot_path); }
+        else if (strcmp(a, "--model") == 0)          { REQUIRE_VALUE(model_name); }
+        else if (strcmp(a, "--hang-timeout") == 0) {
+            const char *val;
+            REQUIRE_VALUE(val);
             char *end;
             double t = strtod(val, &end);
             if (end == val || *end != '\0' || t < 0.0) {
@@ -107,6 +117,7 @@ int main(int argc, char **argv)
             }
             hang_timeout_sec = t;
         }
+#undef REQUIRE_VALUE
         else if (strcmp(a, "-") == 0) { script_path = a; }
         else if (a[0] == '-') { fprintf(stderr, "Unknown option: %s\n", a); usage(argv[0]); return 1; }
         else if (!script_path) { script_path = a; }

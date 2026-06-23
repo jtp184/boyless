@@ -120,4 +120,15 @@ printf 'wait 200\nsettle 10\nscreenshot\n' \
 test -s "$STL/screenshot_000.bmp" || { echo "FAIL: settle did not reach the screenshot"; exit 1; }
 echo "PASS: settle stabilizes on a static screen"
 
+# 8. a value-taking flag with no value fails with a clear "needs a value"
+# message (not a misleading "unknown option") and a non-zero exit.
+_arg_rc=0
+"$BOYLESS" --rom "$ROMS/fill.gb" --screenshot-dir 2>"$WORK/arg_stderr.txt" || _arg_rc=$?
+if [ "$_arg_rc" -eq 0 ]; then
+    echo "FAIL: missing flag value did not exit non-zero"; exit 1
+fi
+grep -q "needs a value" "$WORK/arg_stderr.txt" \
+    || { echo "FAIL: missing flag value did not report 'needs a value'"; exit 1; }
+echo "PASS: missing flag value reports a clear error"
+
 echo "integration: OK"
