@@ -29,6 +29,7 @@ Options:
 |--------|---------|
 | `--rom <path>` | ROM to load (required) |
 | `--script <path>` | script file (`-` or omitted reads stdin) |
+| `--sym <path>` | RGBDS `.sym` file; `{symbol}` references in the script expand to addresses |
 | `--boot <path>` | boot ROM (defaults per model) |
 | `--model <dmg\|cgb\|sgb>` | emulated model (default cgb) |
 | `--tga` | write TGA screenshots instead of BMP |
@@ -52,6 +53,8 @@ One command per line; `#` starts a comment.
 | `up <key>` | release a key |
 | `screenshot [number]` | write `screenshot_NNN.<ext>`; auto-numbered unless an id is given |
 | `compare <number>` | compare the live screen exactly to reference `screenshot_NNN.<ext>`; mismatch is a failure |
+| `differ <number>` | assert the live screen **differs** from `screenshot_NNN.<ext>` in the screenshot dir (captured earlier in the run); an identical or missing image is a failure |
+| `noblank` | assert the live screen is **not** a single flat colour; a blank (uniform) screen is a failure |
 | `memory <addr> [value]` | read the byte at 16-bit hex `addr`; with `value` assert equality, without it print the byte |
 
 Keys: `a b start select up down left right`.
@@ -63,10 +66,25 @@ or `tga` with `--tga`), where `NNN` is a zero-padded counter shared by
 Memory addresses are 16-bit hex (a leading `$` is optional). A `memory` value
 is decimal by default, or hex with a `$` prefix; both forms are a single byte.
 
+### Symbols
+
+Pass an RGBDS `.sym` file with `--sym <path>` and any `{symbol}` token in the
+script expands to that symbol's address before the line is parsed:
+
+    memory {wValue} $42        # {wValue} -> $C000
+    memory {wPlayer+4}         # struct field: base address + 4
+    memory {wGrid-1}           # base address - 1
+
+The offset after `+`/`-` is decimal by default, or hex with a `$` prefix
+(`{wValue+$10}`). Symbol names are **case-sensitive** (RGBDS labels are). The
+bank in the `.sym` is ignored — only the 16-bit address is used. A `{symbol}`
+reference with no `--sym` file, an unknown name, or an offset that lands outside
+`$0000-$FFFF` is a parse error.
+
 ### Assertions and exit codes
 
-`compare`, `memory`, a `settle` that never stabilizes, and a detected hang are
-all **failures**. boyless runs the whole script, reports every failure, and
+`compare`, `differ`, `noblank`, `memory`, a `settle` that never stabilizes, and
+a detected hang are all **failures**. boyless runs the whole script, reports every failure, and
 exits non-zero if any occurred — so it works directly as a test in CI. Use
 `--fail-fast` to stop at the first failure, or `--report-only` to inspect
 failures without affecting the exit code.
