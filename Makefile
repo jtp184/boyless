@@ -19,7 +19,7 @@ BOOT_OUT := $(patsubst %,build/bin/%,$(BOOTROMS))
 all: build/bin/boyless $(BOOT_OUT)
 
 # Assembly test ROMs (RGBDS).
-testroms: build/testroms/fill.gb build/testroms/input.gb build/testroms/mem.gb
+testroms: build/testroms/fill.gb build/testroms/input.gb build/testroms/mem.gb build/testroms/blank.gb
 
 build/testroms/fill.gb: testroms/fill.asm
 	@mkdir -p $(dir $@)
@@ -36,7 +36,13 @@ build/testroms/input.gb: testroms/input.asm
 build/testroms/mem.gb: testroms/mem.asm
 	@mkdir -p $(dir $@)
 	$(RGBASM) -o build/testroms/mem.o $<
-	$(RGBLINK) -o $@ build/testroms/mem.o
+	$(RGBLINK) -n build/testroms/mem.sym -o $@ build/testroms/mem.o
+	$(RGBFIX) -v -p 0xFF $@
+
+build/testroms/blank.gb: testroms/blank.asm
+	@mkdir -p $(dir $@)
+	$(RGBASM) -o build/testroms/blank.o $<
+	$(RGBLINK) -o $@ build/testroms/blank.o
 	$(RGBFIX) -v -p 0xFF $@
 
 integration: all testroms
