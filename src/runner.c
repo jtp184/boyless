@@ -86,14 +86,14 @@ static int write_numbered(GB_gameboy_t *gb, const char *dir, unsigned id,
 static bool do_compare(GB_gameboy_t *gb, const command_t *cmd,
                        const runner_config_t *cfg, runner_result_t *result)
 {
-    unsigned w = GB_get_screen_width(gb);
-    unsigned h = GB_get_screen_height(gb);
-
     if (cfg->update_mode) {
         if (write_numbered(gb, cfg->reference_dir, cmd->number, "", cfg) == 0)
             result->screenshots_written++;
         return false;
     }
+
+    unsigned w = GB_get_screen_width(gb);
+    unsigned h = GB_get_screen_height(gb);
 
     char ref_path[1200];
     snprintf(ref_path, sizeof(ref_path), "%s/screenshot_%03u.%s",
@@ -194,7 +194,14 @@ void runner_run(GB_gameboy_t *gb, const script_t *script,
                 break;
             }
             case CMD_SETTLE:
-                if (do_settle(gb, cmd, cfg, result) && cfg->fail_fast) stop = true;
+                if (do_settle(gb, cmd, cfg, result)) {
+                    if (cfg->fail_fast) stop = true;
+                } else {
+                    /* A settled screen is legitimately static; start hang
+                       detection fresh from it so the carried-over streak
+                       doesn't trip a spurious hang on the next wait. */
+                    hang_tracker_init(&hang);
+                }
                 break;
             case CMD_DOWN:
                 GB_set_key_state(gb, cmd->key, true);

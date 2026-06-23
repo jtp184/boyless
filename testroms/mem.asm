@@ -1,7 +1,7 @@
 ; mem.asm — DMG test ROM for boyless `memory` assertions.
 ;
 ; Writes a known byte ($42) to WRAM $C000 immediately after boot, then idles.
-; boyless can then assert `memory C000 42` passes and `memory C000 99` fails.
+; boyless can then assert `memory C000 $42` passes and `memory C000 $99` fails.
 
 SECTION "Entry", ROM0[$100]
     nop
