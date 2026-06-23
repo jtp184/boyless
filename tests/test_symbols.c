@@ -55,6 +55,13 @@ static void test_malformed_line_fails(void)
     assert(load_str("00:c000 wValue\nnonsense_without_colon_or_label\n") == NULL);
 }
 
+static void test_load_null_args(void)
+{
+    symbols_t *p = NULL;
+    assert(!symbols_load(NULL, &p));     /* NULL path rejected, no crash */
+    assert(!symbols_load("ignored", NULL)); /* NULL out rejected, no crash */
+}
+
 /* Convenience wrapper: returns true on success, fills `out`. */
 static bool expand(const symbols_t *s, const char *tok, char *out, bool *was_ref)
 {
@@ -86,6 +93,7 @@ static void test_expand(void)
     assert(!expand(s, "{nope}", out, &ref) && ref);          /* unknown symbol */
     assert(!expand(s, "{wTop+2}", out, &ref) && ref);        /* overflow past $FFFF */
     assert(!expand(s, "{wValue-49153}", out, &ref) && ref);  /* underflow below 0 */
+    assert(!expand(s, "{wValue+70000}", out, &ref) && ref);  /* magnitude > 0xFFFF rejected */
     assert(!expand(s, "{wValue", out, &ref) && ref);         /* missing close brace */
     assert(!expand(s, "wValue}", out, &ref) && !ref);        /* stray close brace, not a ref */
     assert(!expand(s, "{wValue+}", out, &ref) && ref);       /* empty offset */
@@ -93,6 +101,10 @@ static void test_expand(void)
 
     /* a reference with no symbol table is an error */
     assert(!expand(NULL, "{wValue}", out, &ref) && ref);
+
+    /* a NULL was_ref out-param is rejected, not dereferenced */
+    char err[128];
+    assert(!symbols_expand_token(s, "{wValue}", out, sizeof(out), err, sizeof(err), NULL));
 
     symbols_free(s);
 }
@@ -102,6 +114,7 @@ int main(void)
     test_load_and_lookup();
     test_first_wins();
     test_malformed_line_fails();
+    test_load_null_args();
     test_expand();
     printf("test_symbols: OK\n");
     return 0;

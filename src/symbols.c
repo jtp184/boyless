@@ -50,6 +50,7 @@ static bool sym_append(symbols_t *s, const char *name, uint16_t addr)
 
 bool symbols_load(const char *path, symbols_t **out)
 {
+    if (!path || !out) return false;
     FILE *f = fopen(path, "r");
     if (!f) {
         fprintf(stderr, "Failed to open symbol file '%s'\n", path);
@@ -138,6 +139,7 @@ bool symbols_expand_token(const symbols_t *syms, const char *token,
                           char *out, size_t out_len,
                           char *errbuf, size_t err_len, bool *was_ref)
 {
+    if (!was_ref) return false;   /* required out-param; cannot report otherwise */
     *was_ref = false;
     if (!token) {
         snprintf(errbuf, err_len, "null token");
@@ -185,6 +187,13 @@ bool symbols_expand_token(const symbols_t *syms, const char *token,
         unsigned long mag;
         if (!parse_offset(op + 1, &mag)) {
             snprintf(errbuf, err_len, "bad offset in '%s'", token);
+            return false;
+        }
+        /* Any |offset| > 0xFFFF can never yield an in-range 16-bit address.
+           Reject before the cast to long so a magnitude > LONG_MAX never hits
+           an implementation-defined conversion. */
+        if (mag > 0xFFFF) {
+            snprintf(errbuf, err_len, "offset out of range in '%s'", token);
             return false;
         }
         offset = sign == '-' ? -(long)mag : (long)mag;
