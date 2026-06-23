@@ -98,7 +98,7 @@ bool symbols_load(const char *path, symbols_t **out)
 
 bool symbols_lookup(const symbols_t *syms, const char *name, uint16_t *addr)
 {
-    if (!syms || !name) return false;
+    if (!syms || !name || !addr) return false;
     for (size_t i = 0; i < syms->count; i++) {
         if (strcmp(syms->entries[i].name, name) == 0) {  /* first wins */
             *addr = syms->entries[i].addr;
@@ -141,6 +141,7 @@ bool symbols_expand_token(const symbols_t *syms, const char *token,
 {
     if (!was_ref) return false;   /* required out-param; cannot report otherwise */
     *was_ref = false;
+    if (!out || !errbuf) return false;   /* required buffers; needed to report/emit */
     if (!token) {
         snprintf(errbuf, err_len, "null token");
         return false;

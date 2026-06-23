@@ -38,6 +38,7 @@ static void test_load_and_lookup(void)
     assert(!symbols_lookup(s, "wvalue", &a));   /* case-sensitive */
     assert(!symbols_lookup(s, "Missing", &a));
     assert(!symbols_lookup(NULL, "Start", &a));
+    assert(!symbols_lookup(s, "Start", NULL)); /* NULL addr out-param rejected */
     symbols_free(s);
 }
 
@@ -102,9 +103,11 @@ static void test_expand(void)
     /* a reference with no symbol table is an error */
     assert(!expand(NULL, "{wValue}", out, &ref) && ref);
 
-    /* a NULL was_ref out-param is rejected, not dereferenced */
+    /* NULL required out-params/buffers are rejected, not dereferenced */
     char err[128];
     assert(!symbols_expand_token(s, "{wValue}", out, sizeof(out), err, sizeof(err), NULL));
+    assert(!symbols_expand_token(s, "{wValue}", NULL, 0, err, sizeof(err), &ref));
+    assert(!symbols_expand_token(s, "{wValue}", out, sizeof(out), NULL, 0, &ref));
 
     symbols_free(s);
 }

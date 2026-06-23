@@ -8,6 +8,10 @@
 /* Opaque table of RGBDS symbol name -> 16-bit address. */
 typedef struct symbols symbols_t;
 
+/* All functions below are NULL-tolerant: any required pointer argument
+   (including out-params and buffers) that is NULL makes the call return false
+   (or no-op, for symbols_free) instead of dereferencing it. */
+
 /* Parse an RGBDS .sym file ("BB:AAAA Label" lines; ';' comments; blanks).
    Only the 16-bit address and label are kept; bank is dropped. On success sets
    *out to a newly allocated table and returns true. On failure logs to stderr
@@ -15,7 +19,7 @@ typedef struct symbols symbols_t;
 bool symbols_load(const char *path, symbols_t **out);
 
 /* Look up `name` case-sensitively. On hit writes the address and returns true.
-   The first matching entry wins. Returns false if syms is NULL or no match. */
+   The first matching entry wins. Returns false on no match or a NULL argument. */
 bool symbols_lookup(const symbols_t *syms, const char *name, uint16_t *addr);
 
 /* Expand one whitespace-delimited script token.
