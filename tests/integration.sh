@@ -44,4 +44,59 @@ if [ "$distinct" -ne 8 ]; then
     echo "FAIL: buttons not all distinct ($distinct/8 unique screens)"; exit 1
 fi
 echo "PASS: all 8 buttons produce distinct screens"
+
+# 4. memory: mem.gb writes $42 to $C000. Asserting the right value passes;
+# asserting a wrong value fails non-zero and prints expected-vs-actual.
+# wait 200 lets the DMG boot ROM finish (~154 frames) before user code runs.
+printf 'wait 200\nmemory C000 $42\n' \
+    | "$BOYLESS" --model dmg --rom "$ROMS/mem.gb" --hang-timeout 0 -
+echo "PASS: memory assertion matches"
+
+_mem_rc=0
+printf 'wait 200\nmemory C000 $99\n' \
+    | "$BOYLESS" --model dmg --rom "$ROMS/mem.gb" --hang-timeout 0 - \
+    2>"$WORK/mem_stderr.txt" || _mem_rc=$?
+if [ "$_mem_rc" -eq 0 ]; then
+    echo "FAIL: wrong memory assertion did not exit non-zero"; exit 1
+fi
+if ! grep -q "expected" "$WORK/mem_stderr.txt"; then
+    echo "FAIL: memory mismatch did not report expected value"; exit 1
+fi
+echo "PASS: memory mismatch fails"
+
+# memory print form (no value) never fails and reports the byte.
+printf 'wait 200\nmemory C000\n' \
+    | "$BOYLESS" --model dmg --rom "$ROMS/mem.gb" --hang-timeout 0 - \
+    2>"$WORK/mem_print.txt"
+grep -q 'memory \$C000 = \$42' "$WORK/mem_print.txt" \
+    || { echo "FAIL: memory print form wrong output"; exit 1; }
+echo "PASS: memory print form reports value"
+
+# 5. compare: mint a reference from fill.gb under --update, then re-run to
+# assert it matches. fill.gb is static so the screen is reproducible.
+REF="$WORK/refs"; mkdir -p "$REF"
+printf 'wait 300\ncompare 0\n' \
+    | "$BOYLESS" --model dmg --rom "$ROMS/fill.gb" --hang-timeout 0 \
+        --reference-dir "$REF" --update -
+test -s "$REF/screenshot_000.bmp" || { echo "FAIL: --update did not write reference"; exit 1; }
+echo "PASS: compare --update writes reference"
+
+printf 'wait 300\ncompare 0\n' \
+    | "$BOYLESS" --model dmg --rom "$ROMS/fill.gb" --hang-timeout 0 \
+        --reference-dir "$REF" -
+echo "PASS: compare matches the minted reference"
+
+# Mismatch: compare input.gb (CGB, different screen) against fill's reference.
+# Different dimensions/pixels => failure, non-zero exit, and an .actual dump.
+_cmp_rc=0
+printf 'wait 300\ncompare 0\n' \
+    | "$BOYLESS" --model cgb --rom "$ROMS/input.gb" --hang-timeout 0 \
+        --reference-dir "$REF" --screenshot-dir "$WORK" - \
+    2>"$WORK/cmp_stderr.txt" || _cmp_rc=$?
+if [ "$_cmp_rc" -eq 0 ]; then
+    echo "FAIL: mismatched compare did not exit non-zero"; exit 1
+fi
+test -s "$WORK/screenshot_000.actual.bmp" || { echo "FAIL: no .actual dump on mismatch"; exit 1; }
+echo "PASS: compare mismatch fails and dumps actual frame"
+
 echo "integration: OK"
