@@ -144,6 +144,36 @@ static bool do_compare(GB_gameboy_t *gb, const command_t *cmd,
     return false;
 }
 
+/* Returns true if the difference assertion failed (screen unchanged/missing). */
+static bool do_differ(GB_gameboy_t *gb, const command_t *cmd,
+                      const runner_config_t *cfg, runner_result_t *result)
+{
+    unsigned w = GB_get_screen_width(gb);
+    unsigned h = GB_get_screen_height(gb);
+
+    char base_path[1200];
+    snprintf(base_path, sizeof(base_path), "%s/screenshot_%03u.%s",
+             cfg->screenshot_dir, cmd->number, screenshot_extension());
+
+    static uint32_t base[256 * 224];
+    unsigned bw = 0, bh = 0;
+    if (screenshot_read(base_path, base, 256 * 224, &bw, &bh) != 0) {
+        fprintf(stderr, "differ (line %u): cannot read baseline '%s'\n",
+                cmd->line, base_path);
+        result->failures++;
+        return true;
+    }
+    if (bw == w && bh == h &&
+        memcmp(base, cfg->framebuffer, (size_t)w * h * sizeof(uint32_t)) == 0) {
+        fprintf(stderr, "differ (line %u): screen still matches '%s' "
+                        "but differ requires a change\n",
+                cmd->line, base_path);
+        result->failures++;
+        return true;
+    }
+    return false;
+}
+
 /* Returns true if the assertion failed. */
 static bool do_memory(GB_gameboy_t *gb, const command_t *cmd, runner_result_t *result)
 {
@@ -243,6 +273,12 @@ void runner_run(GB_gameboy_t *gb, const script_t *script,
             }
             case CMD_COMPARE: {
                 bool failed = do_compare(gb, cmd, cfg, result);
+                if (cmd->number >= next_id) next_id = cmd->number + 1;
+                if (failed && cfg->fail_fast) stop = true;
+                break;
+            }
+            case CMD_DIFFER: {
+                bool failed = do_differ(gb, cmd, cfg, result);
                 if (cmd->number >= next_id) next_id = cmd->number + 1;
                 if (failed && cfg->fail_fast) stop = true;
                 break;
