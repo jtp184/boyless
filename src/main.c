@@ -51,20 +51,6 @@ static char *executable_relative_path(const char *filename)
     return path;
 }
 
-/* Derive the auto-screenshot basename: strip directory and extension.
-   For stdin ("-"/NULL) use "boyless". */
-static void derive_basename(const char *script_path, char *out, size_t out_sz)
-{
-    const char *src = (!script_path || strcmp(script_path, "-") == 0) ? "boyless" : script_path;
-    strncpy(out, src, out_sz - 1);
-    out[out_sz - 1] = 0;
-    char *slash = strrchr(out, '/');
-    char *base = slash ? slash + 1 : out;
-    char *dot = strrchr(base, '.');
-    if (dot) *dot = 0;
-    if (base != out) memmove(out, base, strlen(base) + 1);
-}
-
 static void usage(const char *argv0)
 {
     fprintf(stderr,
@@ -74,8 +60,12 @@ static void usage(const char *argv0)
         "  --boot <path>         boot ROM (defaults per model)\n"
         "  --model <dmg|cgb|sgb> emulated model (default cgb)\n"
         "  --tga                 write TGA screenshots instead of BMP\n"
+        "  --screenshot-dir <d>  dir for screenshots and .actual dumps (default .)\n"
+        "  --reference-dir <d>   dir for compare references (default .)\n"
+        "  --update              write compare references instead of asserting\n"
+        "  --fail-fast           stop at the first failed assertion\n"
+        "  --report-only         print failures but always exit 0\n"
         "  --hang-timeout <sec>  seconds of frozen video before flagging (default 5, 0 disables)\n"
-        "  --fail-on-hang        exit non-zero if a hang is detected\n"
         "  --version             print version and exit\n",
         argv0);
 }
@@ -86,15 +76,23 @@ int main(int argc, char **argv)
     const char *script_path = NULL;
     const char *boot_path = NULL;
     const char *model_name = "cgb";
+    const char *screenshot_dir = ".";
+    const char *reference_dir = ".";
     bool use_tga = false;
-    bool fail_on_hang = false;
+    bool update_mode = false;
+    bool fail_fast = false;
+    bool report_only = false;
     double hang_timeout_sec = 5.0;
 
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
         if (strcmp(a, "--version") == 0) { printf("boyless %s\n", BOYLESS_VERSION); return 0; }
         else if (strcmp(a, "--tga") == 0) { use_tga = true; }
-        else if (strcmp(a, "--fail-on-hang") == 0) { fail_on_hang = true; }
+        else if (strcmp(a, "--update") == 0) { update_mode = true; }
+        else if (strcmp(a, "--fail-fast") == 0) { fail_fast = true; }
+        else if (strcmp(a, "--report-only") == 0) { report_only = true; }
+        else if (strcmp(a, "--screenshot-dir") == 0 && i + 1 < argc) { screenshot_dir = argv[++i]; }
+        else if (strcmp(a, "--reference-dir") == 0 && i + 1 < argc) { reference_dir = argv[++i]; }
         else if (strcmp(a, "--rom") == 0 && i + 1 < argc) { rom_path = argv[++i]; }
         else if (strcmp(a, "--script") == 0 && i + 1 < argc) { script_path = argv[++i]; }
         else if (strcmp(a, "--boot") == 0 && i + 1 < argc) { boot_path = argv[++i]; }
@@ -156,23 +154,23 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    char basename[1024];
-    derive_basename(script_path, basename, sizeof(basename));
-
     runner_config_t cfg = {
         .framebuffer = framebuffer,
-        .screenshot_basename = basename,
+        .screenshot_dir = screenshot_dir,
+        .reference_dir = reference_dir,
         .hang_timeout_frames = hang_timeout_sec > 0 ? (unsigned)(hang_timeout_sec * 60.0) : 0,
+        .update_mode = update_mode,
+        .fail_fast = fail_fast,
     };
     runner_result_t result = {0};
     runner_run(&gb, &script, &cfg, &result);
 
-    fprintf(stderr, "Ran %u frames, wrote %u screenshot(s).\n",
-            result.frames_run, result.screenshots_written);
+    fprintf(stderr, "Ran %u frames, wrote %u screenshot(s), %u failure(s).\n",
+            result.frames_run, result.screenshots_written, result.failures);
 
     script_free(&script);
     GB_free(&gb);
 
-    if (result.hang_detected && fail_on_hang) return 1;
+    if (result.failures > 0 && !report_only) return 1;
     return 0;
 }

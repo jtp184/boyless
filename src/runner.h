@@ -40,14 +40,18 @@ settle_status_t settle_tracker_update(settle_tracker_t *t, uint64_t hash,
 
 typedef struct {
     uint32_t   *framebuffer;          /* GB_set_pixels_output target */
-    const char *screenshot_basename;  /* for auto-named screenshots */
+    const char *screenshot_dir;       /* dir for screenshot writes + .actual dumps */
+    const char *reference_dir;        /* dir compare reads/writes goldens */
     unsigned    hang_timeout_frames;  /* 0 disables hang detection */
+    bool        update_mode;          /* compare writes references instead of asserting */
+    bool        fail_fast;            /* stop at first assertion failure */
 } runner_config_t;
 
 typedef struct {
     bool     hang_detected;
     unsigned frames_run;
     unsigned screenshots_written;
+    unsigned failures;                /* compare + memory + settle + hang */
 } runner_result_t;
 
 /* Execute the script against `gb`. Caller must have initialized the core,

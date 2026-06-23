@@ -1,5 +1,6 @@
 #include "script.h"
 #include <limits.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -25,6 +26,37 @@ static bool parse_uint(const char *s, unsigned *out)
     unsigned long v = strtoul(s, &end, 10);
     if (*end != 0) return false;
     if (v > UINT_MAX) return false;
+    *out = (unsigned)v;
+    return true;
+}
+
+/* Parse a 16-bit hex address. Accepts an optional '$' or '0x' prefix. */
+static bool parse_hex16(const char *s, uint16_t *out)
+{
+    if (!s || !*s) return false;
+    if (s[0] == '$') s++;
+    else if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) s += 2;
+    if (!*s) return false;
+    char *end;
+    unsigned long v = strtoul(s, &end, 16);
+    if (*end != 0) return false;
+    if (v > 0xFFFF) return false;
+    *out = (uint16_t)v;
+    return true;
+}
+
+/* Parse a single byte value. Decimal by default; '$' or '0x' prefix = hex. */
+static bool parse_byte(const char *s, unsigned *out)
+{
+    if (!s || !*s) return false;
+    int base = 10;
+    if (s[0] == '$') { s++; base = 16; }
+    else if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) { s += 2; base = 16; }
+    if (!*s || s[0] == '-' || s[0] == '+') return false;
+    char *end;
+    unsigned long v = strtoul(s, &end, base);
+    if (*end != 0) return false;
+    if (v > 255) return false;
     *out = (unsigned)v;
     return true;
 }
@@ -67,9 +99,13 @@ bool script_parse_stream(FILE *f, const char *label, script_t *out)
         }
         command_t *cmd = &commands[count];
         cmd->line = line_no;
-        cmd->filename = NULL;
-        cmd->count = 0;
         cmd->key = GB_KEY_A;
+        cmd->count = 0;
+        cmd->number = 0;
+        cmd->has_number = false;
+        cmd->addr = 0;
+        cmd->value = 0;
+        cmd->has_value = false;
 
         const char *verb = tokens[0];
 
@@ -79,6 +115,13 @@ bool script_parse_stream(FILE *f, const char *label, script_t *out)
                 error = true; break;
             }
             cmd->type = CMD_WAIT;
+        }
+        else if (strcasecmp(verb, "settle") == 0) {
+            if (ntokens != 2 || !parse_uint(tokens[1], &cmd->count) || cmd->count == 0) {
+                fprintf(stderr, "%s:%u: 'settle' needs a positive frame count\n", label, line_no);
+                error = true; break;
+            }
+            cmd->type = CMD_SETTLE;
         }
         else if (strcasecmp(verb, "press") == 0) {
             int key = ntokens >= 2 ? parse_key(tokens[1]) : -1;
@@ -105,17 +148,39 @@ bool script_parse_stream(FILE *f, const char *label, script_t *out)
         }
         else if (strcasecmp(verb, "screenshot") == 0) {
             if (ntokens > 2) {
-                fprintf(stderr, "%s:%u: 'screenshot' takes an optional filename\n", label, line_no);
+                fprintf(stderr, "%s:%u: 'screenshot' takes an optional id number\n", label, line_no);
                 error = true; break;
             }
             cmd->type = CMD_SCREENSHOT;
             if (ntokens == 2) {
-                cmd->filename = strdup(tokens[1]);
-                if (!cmd->filename) {
-                    fprintf(stderr, "%s:%u: out of memory allocating filename\n", label, line_no);
+                if (!parse_uint(tokens[1], &cmd->number)) {
+                    fprintf(stderr, "%s:%u: invalid screenshot id '%s'\n", label, line_no, tokens[1]);
                     error = true; break;
                 }
+                cmd->has_number = true;
             }
+        }
+        else if (strcasecmp(verb, "compare") == 0) {
+            if (ntokens != 2 || !parse_uint(tokens[1], &cmd->number)) {
+                fprintf(stderr, "%s:%u: 'compare' needs a reference id number\n", label, line_no);
+                error = true; break;
+            }
+            cmd->has_number = true;
+            cmd->type = CMD_COMPARE;
+        }
+        else if (strcasecmp(verb, "memory") == 0) {
+            if (ntokens < 2 || ntokens > 3 || !parse_hex16(tokens[1], &cmd->addr)) {
+                fprintf(stderr, "%s:%u: 'memory' needs a 16-bit hex address and optional value\n", label, line_no);
+                error = true; break;
+            }
+            if (ntokens == 3) {
+                if (!parse_byte(tokens[2], &cmd->value)) {
+                    fprintf(stderr, "%s:%u: invalid memory value '%s'\n", label, line_no, tokens[2]);
+                    error = true; break;
+                }
+                cmd->has_value = true;
+            }
+            cmd->type = CMD_MEMORY;
         }
         else {
             fprintf(stderr, "%s:%u: unknown command '%s'\n", label, line_no, verb);
@@ -126,7 +191,6 @@ bool script_parse_stream(FILE *f, const char *label, script_t *out)
     }
 
     if (error) {
-        for (size_t i = 0; i < count; i++) free(commands[i].filename);
         free(commands);
         return false;
     }
@@ -156,7 +220,6 @@ bool script_parse_path(const char *path, script_t *out)
 void script_free(script_t *script)
 {
     if (!script || !script->commands) return;
-    for (size_t i = 0; i < script->count; i++) free(script->commands[i].filename);
     free(script->commands);
     script->commands = NULL;
     script->count = 0;
