@@ -1,10 +1,38 @@
-# boyless example script
+# boyless example script — the assertion-based test-runner workflow.
+#
+# Run it twice:
+#   1) mint golden references:
+#        boyless --rom game.gb --reference-dir refs --update examples/example.script
+#   2) check against them on later runs:
+#        boyless --rom game.gb --reference-dir refs examples/example.script
+# A `compare` mismatch or a failed `memory` assertion makes boyless exit
+# non-zero, so the script works directly as a CI test. Add --screenshot-dir to
+# control where captured/`.actual` shots are written.
+
 # The boot ROM animation runs for ~300 frames before the cartridge's own code
 # starts, so wait past it before the first capture (see README "Boot timing").
 wait 300
-screenshot intro.bmp
+
+# Capture the title screen. With no id it auto-numbers -> screenshot_000.<ext>.
+screenshot
+
+# Advance into the menu, then `settle` until the screen stops changing instead
+# of guessing a fixed frame count — this survives timing drift across builds.
 press start 4
-wait 30
+settle 10
+
+# Assert the menu screen matches its golden reference. `screenshot` and
+# `compare` share one id counter, so after the auto screenshot above (id 0)
+# this targets reference screenshot_001. Under --update it writes that
+# reference; otherwise it compares exactly and fails on any difference.
+compare 1
+
+# Make a selection and assert a game-state byte. `memory <addr>` is 16-bit hex;
+# the value is decimal by default (use a `$` prefix for hex). Point these at a
+# real address/value for your ROM — e.g. a "selection confirmed" flag.
 press a 4
-wait 30
-screenshot after_menu.bmp
+settle 10
+memory C000 $01
+
+# Capture the resulting screen too (auto-numbered -> screenshot_002).
+screenshot
